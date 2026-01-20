@@ -1,9 +1,10 @@
 const { v4: uuidv4 } = require('uuid');
+const mlService = require('../services/mlService');
 
 /**
  * ML Controller
  * Handles all machine learning related API endpoints
- * These are simulation endpoints - will be replaced with actual ML model calls
+ * Connected to Flask ML API for real predictions
  */
 
 // ML Model status tracking
@@ -228,9 +229,20 @@ exports.analyzeSoiling = (req, res) => {
 };
 
 // POST /api/ml/predict/degradation
-exports.predictDegradation = (req, res) => {
+exports.predictDegradation = async (req, res) => {
   try {
-    const { panelId, historicalData, projectionMonths = 60 } = req.body;
+    const { panelId, historicalData, projectionMonths = 60, temperature, humidity, voltageMax, voltageMin, currentMax, currentMin, daysSinceInstallation } = req.body;
+
+    // Use real ML model for degradation prediction
+    const mlResult = await mlService.predictDegradation({
+      temperature: temperature || 30,
+      humidity: humidity || 60,
+      voltage_max: voltageMax || 40,
+      voltage_min: voltageMin || 35,
+      current_max: currentMax || 10,
+      current_min: currentMin || 8,
+      days_since_installation: daysSinceInstallation || 365
+    });
 
     const currentEfficiency = 94 + Math.random() * 4;
     const monthlyDegradation = 0.03 + Math.random() * 0.04;
@@ -253,6 +265,13 @@ exports.predictDegradation = (req, res) => {
       data: {
         predictionId: uuidv4(),
         panelId: panelId || 'all',
+        // Real ML model results
+        degradationIndex: mlResult.degradation_index,
+        degradationStatus: mlResult.status,
+        stressFactors: mlResult.stress_factors,
+        mlRecommendation: mlResult.recommendation,
+        source: mlResult.source,
+        // Projection data
         currentEfficiency: currentEfficiency.toFixed(2),
         monthlyDegradationRate: monthlyDegradation.toFixed(4),
         yearlyDegradationRate: (monthlyDegradation * 12).toFixed(2),
@@ -276,17 +295,34 @@ exports.predictDegradation = (req, res) => {
 };
 
 // POST /api/ml/predict/efficiency
-exports.predictEfficiency = (req, res) => {
+exports.predictEfficiency = async (req, res) => {
   try {
     const { 
       tilt, 
       azimuth, 
       temperature, 
+      humidity,
+      windSpeed,
+      irradiance,
+      voltage,
+      current,
+      daysSinceInstallation,
       cloudCover, 
       soilingLevel,
       latitude,
       date 
     } = req.body;
+
+    // Use real ML model for efficiency loss prediction
+    const mlResult = await mlService.predictEfficiencyLoss({
+      temperature: temperature || 30,
+      humidity: humidity || 60,
+      wind_speed: windSpeed || 5,
+      irradiance: irradiance || 500,
+      voltage: voltage || 35,
+      current: current || 8,
+      days_since_installation: daysSinceInstallation || 365
+    });
 
     const baseEfficiency = 95;
     const tiltFactor = tilt ? Math.cos((Math.abs(tilt - 30) * Math.PI) / 180) : 1;
@@ -300,6 +336,13 @@ exports.predictEfficiency = (req, res) => {
       success: true,
       data: {
         predictionId: uuidv4(),
+        // Real ML model results
+        efficiencyLoss: mlResult.efficiency_loss,
+        efficiencyLossPercent: mlResult.efficiency_loss_percent,
+        panelStatus: mlResult.status,
+        mlRecommendation: mlResult.recommendation,
+        source: mlResult.source,
+        // Calculated efficiency
         predictedEfficiency: predictedEfficiency.toFixed(2),
         theoreticalMaximum: 98.0,
         factors: {
@@ -311,6 +354,7 @@ exports.predictEfficiency = (req, res) => {
         recommendations: [
           tiltFactor < 0.95 ? `Adjust tilt to ${30}° for optimal angle` : null,
           soilingFactor < 0.95 ? 'Schedule cleaning to improve output' : null,
+          mlResult.recommendation
         ].filter(Boolean),
         modelVersion: modelStatus.efficiencyPredictor.version
       }
@@ -426,18 +470,27 @@ exports.optimizeTilt = (req, res) => {
 };
 
 // GET /api/ml/models/status
-exports.getModelStatus = (req, res) => {
+exports.getModelStatus = async (req, res) => {
   try {
+    // Check real ML API health
+    const mlHealth = await mlService.checkHealth();
+    const mlModelInfo = await mlService.getModelInfo();
+
     res.json({
       success: true,
       data: {
-        overallStatus: 'simulated',
-        message: 'All models are running in simulation mode. Connect actual ML endpoints for production.',
+        overallStatus: mlHealth.connected ? 'connected' : 'simulated',
+        message: mlHealth.connected 
+          ? 'ML API connected - using real model predictions'
+          : 'ML API offline - using simulation fallback',
+        mlApiStatus: mlHealth,
+        mlModelInfo: mlModelInfo,
+        mlApiUrl: mlService.ML_API_URL,
         models: modelStatus,
         integrationGuide: {
-          step1: 'Deploy ML models to cloud endpoint (AWS SageMaker, Azure ML, etc.)',
-          step2: 'Update .env with model endpoint URLs',
-          step3: 'Replace simulation logic with actual API calls'
+          step1: 'Start Flask ML API: python ml_api.py',
+          step2: 'ML API runs on http://localhost:5001',
+          step3: 'Predictions now use trained RandomForest model'
         }
       }
     });

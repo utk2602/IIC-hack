@@ -1,11 +1,6 @@
 const { v4: uuidv4 } = require('uuid');
 
-/**
- * Dashboard Controller
- * Handles all dashboard-related API endpoints
- */
 
-// GET /api/dashboard/stats
 exports.getStats = (req, res) => {
   try {
     const stats = {
