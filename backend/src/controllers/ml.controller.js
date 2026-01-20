@@ -1,0 +1,447 @@
+const { v4: uuidv4 } = require('uuid');
+
+/**
+ * ML Controller
+ * Handles all machine learning related API endpoints
+ * These are simulation endpoints - will be replaced with actual ML model calls
+ */
+
+// ML Model status tracking
+const modelStatus = {
+  defectDetection: {
+    name: 'Defect Detection CNN',
+    status: 'simulated',
+    version: '1.0.0-sim',
+    accuracy: 94.5,
+    lastTrained: '2025-12-15',
+    endpoint: null
+  },
+  hotspotDetection: {
+    name: 'Thermal Hotspot Detector',
+    status: 'simulated',
+    version: '1.0.0-sim',
+    accuracy: 92.8,
+    lastTrained: '2025-12-10',
+    endpoint: null
+  },
+  soilingAnalysis: {
+    name: 'Soiling Level Analyzer',
+    status: 'simulated',
+    version: '1.0.0-sim',
+    accuracy: 89.2,
+    lastTrained: '2025-11-28',
+    endpoint: null
+  },
+  degradationPredictor: {
+    name: 'Degradation LSTM Model',
+    status: 'simulated',
+    version: '2.0.0-sim',
+    accuracy: 91.5,
+    lastTrained: '2026-01-05',
+    endpoint: null
+  },
+  efficiencyPredictor: {
+    name: 'Efficiency Regression Model',
+    status: 'simulated',
+    version: '1.5.0-sim',
+    accuracy: 93.1,
+    lastTrained: '2026-01-10',
+    endpoint: null
+  },
+  tiltOptimizer: {
+    name: 'Tilt Angle Optimizer',
+    status: 'simulated',
+    version: '1.0.0-sim',
+    accuracy: 96.2,
+    lastTrained: '2025-12-20',
+    endpoint: null
+  }
+};
+
+// POST /api/ml/analyze
+exports.analyzeData = (req, res) => {
+  try {
+    const { data, analysisType } = req.body;
+
+    if (!data) {
+      return res.status(400).json({ success: false, error: 'No data provided for analysis' });
+    }
+
+    // Simulate ML analysis
+    const result = {
+      analysisId: uuidv4(),
+      type: analysisType || 'general',
+      timestamp: new Date().toISOString(),
+      results: {
+        anomaliesDetected: Math.floor(Math.random() * 5),
+        dataQuality: (85 + Math.random() * 15).toFixed(1),
+        patterns: [
+          { type: 'seasonal', confidence: 0.89, description: 'Detected seasonal production pattern' },
+          { type: 'daily', confidence: 0.95, description: 'Normal daily production curve' }
+        ],
+        recommendations: [
+          'Consider adjusting tilt angle for winter months',
+          'Schedule cleaning within next 14 days'
+        ]
+      },
+      processingTime: (Math.random() * 2 + 0.5).toFixed(2) + 's',
+      modelUsed: 'ensemble-analyzer-v1'
+    };
+
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// POST /api/ml/image/defect-detection
+exports.detectDefects = (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No image provided' });
+    }
+
+    // Simulate defect detection
+    const defects = [];
+    const numDefects = Math.floor(Math.random() * 3);
+    
+    const defectTypes = ['crack', 'hotspot', 'discoloration', 'delamination', 'snail_trail'];
+    const severities = ['low', 'medium', 'high'];
+
+    for (let i = 0; i < numDefects; i++) {
+      defects.push({
+        id: uuidv4(),
+        type: defectTypes[Math.floor(Math.random() * defectTypes.length)],
+        severity: severities[Math.floor(Math.random() * severities.length)],
+        confidence: (0.75 + Math.random() * 0.24).toFixed(2),
+        boundingBox: {
+          x: Math.floor(Math.random() * 800),
+          y: Math.floor(Math.random() * 600),
+          width: Math.floor(Math.random() * 100) + 20,
+          height: Math.floor(Math.random() * 100) + 20
+        },
+        recommendation: 'Schedule inspection within 30 days'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        analysisId: uuidv4(),
+        imageSize: req.file.size,
+        defectsFound: defects.length,
+        defects,
+        overallHealth: defects.length === 0 ? 'excellent' : defects.some(d => d.severity === 'high') ? 'poor' : 'fair',
+        processingTime: (Math.random() * 3 + 1).toFixed(2) + 's',
+        modelVersion: modelStatus.defectDetection.version
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// POST /api/ml/image/hotspot-detection
+exports.detectHotspots = (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No thermal image provided' });
+    }
+
+    const hotspots = [];
+    const numHotspots = Math.floor(Math.random() * 4);
+
+    for (let i = 0; i < numHotspots; i++) {
+      hotspots.push({
+        id: uuidv4(),
+        temperature: (45 + Math.random() * 25).toFixed(1),
+        deltaFromNormal: (5 + Math.random() * 15).toFixed(1),
+        location: {
+          x: Math.floor(Math.random() * 800),
+          y: Math.floor(Math.random() * 600)
+        },
+        radius: Math.floor(Math.random() * 30) + 10,
+        severity: Math.random() > 0.7 ? 'critical' : Math.random() > 0.4 ? 'warning' : 'normal'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        analysisId: uuidv4(),
+        hotspotsDetected: hotspots.length,
+        hotspots,
+        averageTemperature: (35 + Math.random() * 10).toFixed(1),
+        maxTemperature: hotspots.length > 0 ? Math.max(...hotspots.map(h => parseFloat(h.temperature))).toFixed(1) : '35.0',
+        recommendation: hotspots.some(h => h.severity === 'critical') 
+          ? 'Immediate inspection required' 
+          : 'No immediate action required',
+        modelVersion: modelStatus.hotspotDetection.version
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// POST /api/ml/image/soiling-analysis
+exports.analyzeSoiling = (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No image provided' });
+    }
+
+    const soilingLevel = Math.random() * 25;
+    const regions = [];
+    const numRegions = Math.floor(Math.random() * 5) + 1;
+
+    for (let i = 0; i < numRegions; i++) {
+      regions.push({
+        id: `region-${i + 1}`,
+        soilingPercentage: (Math.random() * 30).toFixed(1),
+        type: ['dust', 'bird_droppings', 'pollen', 'leaves'][Math.floor(Math.random() * 4)],
+        area: {
+          x: Math.floor(Math.random() * 800),
+          y: Math.floor(Math.random() * 600),
+          width: Math.floor(Math.random() * 200) + 50,
+          height: Math.floor(Math.random() * 200) + 50
+        }
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        analysisId: uuidv4(),
+        overallSoilingLevel: soilingLevel.toFixed(1),
+        category: soilingLevel < 5 ? 'clean' : soilingLevel < 15 ? 'light' : soilingLevel < 25 ? 'moderate' : 'heavy',
+        regions,
+        estimatedEfficiencyLoss: (soilingLevel * 0.15).toFixed(2),
+        cleaningRecommended: soilingLevel > 10,
+        daysUntilCritical: Math.max(1, Math.floor((25 - soilingLevel) / 2)),
+        modelVersion: modelStatus.soilingAnalysis.version
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// POST /api/ml/predict/degradation
+exports.predictDegradation = (req, res) => {
+  try {
+    const { panelId, historicalData, projectionMonths = 60 } = req.body;
+
+    const currentEfficiency = 94 + Math.random() * 4;
+    const monthlyDegradation = 0.03 + Math.random() * 0.04;
+    
+    const predictions = [];
+    for (let month = 1; month <= projectionMonths; month++) {
+      predictions.push({
+        month,
+        date: new Date(Date.now() + month * 30 * 86400000).toISOString().split('T')[0],
+        predictedEfficiency: Math.max(70, currentEfficiency - (month * monthlyDegradation)).toFixed(2),
+        confidenceInterval: {
+          lower: Math.max(65, currentEfficiency - (month * monthlyDegradation) - 2).toFixed(2),
+          upper: Math.min(100, currentEfficiency - (month * monthlyDegradation) + 2).toFixed(2)
+        }
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        predictionId: uuidv4(),
+        panelId: panelId || 'all',
+        currentEfficiency: currentEfficiency.toFixed(2),
+        monthlyDegradationRate: monthlyDegradation.toFixed(4),
+        yearlyDegradationRate: (monthlyDegradation * 12).toFixed(2),
+        predictions,
+        endOfLifeEstimate: {
+          year: Math.floor(projectionMonths / 12) + new Date().getFullYear(),
+          efficiency: predictions[predictions.length - 1].predictedEfficiency
+        },
+        factors: [
+          { name: 'Temperature Cycling', impact: 'medium', contribution: '35%' },
+          { name: 'UV Exposure', impact: 'high', contribution: '40%' },
+          { name: 'Humidity', impact: 'low', contribution: '15%' },
+          { name: 'Other', impact: 'low', contribution: '10%' }
+        ],
+        modelVersion: modelStatus.degradationPredictor.version
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// POST /api/ml/predict/efficiency
+exports.predictEfficiency = (req, res) => {
+  try {
+    const { 
+      tilt, 
+      azimuth, 
+      temperature, 
+      cloudCover, 
+      soilingLevel,
+      latitude,
+      date 
+    } = req.body;
+
+    const baseEfficiency = 95;
+    const tiltFactor = tilt ? Math.cos((Math.abs(tilt - 30) * Math.PI) / 180) : 1;
+    const tempFactor = temperature ? Math.max(0.8, 1 - (Math.max(0, temperature - 25) * 0.005)) : 1;
+    const cloudFactor = cloudCover ? 1 - (cloudCover / 100) * 0.3 : 1;
+    const soilingFactor = soilingLevel ? 1 - (soilingLevel / 100) * 0.2 : 1;
+
+    const predictedEfficiency = baseEfficiency * tiltFactor * tempFactor * cloudFactor * soilingFactor;
+
+    res.json({
+      success: true,
+      data: {
+        predictionId: uuidv4(),
+        predictedEfficiency: predictedEfficiency.toFixed(2),
+        theoreticalMaximum: 98.0,
+        factors: {
+          tiltImpact: ((1 - tiltFactor) * 100).toFixed(2) + '% loss',
+          temperatureImpact: ((1 - tempFactor) * 100).toFixed(2) + '% loss',
+          cloudImpact: ((1 - cloudFactor) * 100).toFixed(2) + '% loss',
+          soilingImpact: ((1 - soilingFactor) * 100).toFixed(2) + '% loss'
+        },
+        recommendations: [
+          tiltFactor < 0.95 ? `Adjust tilt to ${30}° for optimal angle` : null,
+          soilingFactor < 0.95 ? 'Schedule cleaning to improve output' : null,
+        ].filter(Boolean),
+        modelVersion: modelStatus.efficiencyPredictor.version
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// POST /api/ml/predict/cleaning
+exports.predictCleaningSchedule = (req, res) => {
+  try {
+    const { panelIds, currentSoilingLevel, environmentData } = req.body;
+
+    const soilingRate = 0.5 + Math.random() * 0.5; // % per day
+    const currentLevel = currentSoilingLevel || Math.random() * 10;
+    const threshold = 15; // Cleaning threshold %
+    const daysUntilCleaning = Math.max(1, Math.floor((threshold - currentLevel) / soilingRate));
+    
+    const nextCleaningDate = new Date(Date.now() + daysUntilCleaning * 86400000);
+
+    res.json({
+      success: true,
+      data: {
+        predictionId: uuidv4(),
+        currentSoilingLevel: currentLevel.toFixed(1),
+        soilingRatePerDay: soilingRate.toFixed(2),
+        cleaningThreshold: threshold,
+        daysUntilCleaning,
+        recommendedCleaningDate: nextCleaningDate.toISOString().split('T')[0],
+        estimatedEfficiencyGain: (currentLevel * 0.12).toFixed(2),
+        schedule: [
+          { 
+            date: nextCleaningDate.toISOString().split('T')[0], 
+            type: 'routine',
+            priority: 'normal'
+          },
+          { 
+            date: new Date(nextCleaningDate.getTime() + 30 * 86400000).toISOString().split('T')[0], 
+            type: 'routine',
+            priority: 'normal'
+          },
+          { 
+            date: new Date(nextCleaningDate.getTime() + 60 * 86400000).toISOString().split('T')[0], 
+            type: 'routine',
+            priority: 'normal'
+          }
+        ],
+        costBenefitAnalysis: {
+          cleaningCost: 50,
+          estimatedRecovery: (currentLevel * 0.12 * 5).toFixed(2),
+          netBenefit: ((currentLevel * 0.12 * 5) - 50).toFixed(2),
+          currency: 'USD'
+        }
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// POST /api/ml/optimize/tilt
+exports.optimizeTilt = (req, res) => {
+  try {
+    const { 
+      latitude, 
+      longitude, 
+      currentTilt, 
+      currentAzimuth,
+      optimizationPeriod = 'annual' 
+    } = req.body;
+
+    const lat = latitude || 28.6139; // Default to Delhi
+    
+    // Simple tilt optimization (latitude-based rule of thumb)
+    const optimalAnnualTilt = Math.abs(lat);
+    const optimalSummerTilt = Math.max(0, Math.abs(lat) - 15);
+    const optimalWinterTilt = Math.min(90, Math.abs(lat) + 15);
+
+    const currentMonth = new Date().getMonth();
+    const isSummer = currentMonth >= 3 && currentMonth <= 8;
+    const seasonalOptimal = isSummer ? optimalSummerTilt : optimalWinterTilt;
+
+    res.json({
+      success: true,
+      data: {
+        optimizationId: uuidv4(),
+        location: { latitude: lat, longitude: longitude || 77.2090 },
+        currentSettings: {
+          tilt: currentTilt || 30,
+          azimuth: currentAzimuth || 180
+        },
+        recommendations: {
+          annualOptimalTilt: optimalAnnualTilt.toFixed(1),
+          seasonalOptimalTilt: seasonalOptimal.toFixed(1),
+          optimalAzimuth: lat >= 0 ? 180 : 0, // South for Northern Hemisphere
+          adjustmentNeeded: Math.abs((currentTilt || 30) - seasonalOptimal) > 5
+        },
+        seasonalSchedule: [
+          { months: 'Mar-Aug', recommendedTilt: optimalSummerTilt.toFixed(1) },
+          { months: 'Sep-Feb', recommendedTilt: optimalWinterTilt.toFixed(1) }
+        ],
+        estimatedGain: {
+          withAdjustment: '8-12%',
+          withTracking: '25-35%'
+        },
+        modelVersion: modelStatus.tiltOptimizer.version
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// GET /api/ml/models/status
+exports.getModelStatus = (req, res) => {
+  try {
+    res.json({
+      success: true,
+      data: {
+        overallStatus: 'simulated',
+        message: 'All models are running in simulation mode. Connect actual ML endpoints for production.',
+        models: modelStatus,
+        integrationGuide: {
+          step1: 'Deploy ML models to cloud endpoint (AWS SageMaker, Azure ML, etc.)',
+          step2: 'Update .env with model endpoint URLs',
+          step3: 'Replace simulation logic with actual API calls'
+        }
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
