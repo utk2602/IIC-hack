@@ -4,6 +4,7 @@ import * as THREE from 'three';
 
 export const useSolarSystem = (dimensions: RoofDimensions) => {
   const [panels, setPanels] = useState<Panel[]>([]);
+  const [tilt, setTilt] = useState(0);
 
   const addPanel = useCallback((position: [number, number, number]) => {
     const newPanel: Panel = {
@@ -42,6 +43,7 @@ export const useSolarSystem = (dimensions: RoofDimensions) => {
   const systemStats = {
     panelCount: panels.length,
     systemSize: panels.length * 0.4, // Assume 400W panels
+    panelTilt: tilt,
   };
 
   return {
@@ -50,5 +52,7 @@ export const useSolarSystem = (dimensions: RoofDimensions) => {
     clearPanels,
     removeLastPanel,
     systemStats,
+    tilt,
+    setTilt,
   };
 };
