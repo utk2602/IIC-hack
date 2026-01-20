@@ -9,7 +9,6 @@ import { Lights } from './Lights';
 import { Controls } from './Controls';
 import { useRoofDimensions } from './hooks/useRoofDimensions';
 
-// Inner component to handle camera/scene logic that requires useThree
 const SceneController = ({ onStatsUpdate }: { onStatsUpdate: (angle: string) => void }) => {
   const { camera } = useThree();
   const controlsRef = useRef<any>(null);
@@ -17,7 +16,6 @@ const SceneController = ({ onStatsUpdate }: { onStatsUpdate: (angle: string) => 
   useFrame(() => {
     if (controlsRef.current) {
       const angle = controlsRef.current.getAzimuthalAngle();
-      // Convert view angle to readable degrees (0-360)
       const degrees = Math.round(((angle * 180) / Math.PI + 360) % 360);
       onStatsUpdate(`${degrees}°`);
     }
@@ -29,8 +27,8 @@ const SceneController = ({ onStatsUpdate }: { onStatsUpdate: (angle: string) => 
       makeDefault
       enableDamping
       dampingFactor={0.05}
-      minPolarAngle={Math.PI * (5 / 180)} // 5 degrees
-      maxPolarAngle={Math.PI * (85 / 180)} // 85 degrees
+      minPolarAngle={Math.PI * (5 / 180)} 
+      maxPolarAngle={Math.PI * (85 / 180)} 
       maxDistance={50}
       minDistance={5}
     />
@@ -91,7 +89,7 @@ export const RoofDesigner: React.FC = () => {
           </Suspense>
         </Canvas>
 
-        {/* UI Overlay */}
+       
         <Controls
           showGrid={showGrid}
           setShowGrid={setShowGrid}
