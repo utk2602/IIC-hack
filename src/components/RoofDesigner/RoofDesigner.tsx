@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { Ground } from './Ground';
 import { Lights } from './Lights';
 import { Controls } from './Controls';
+import { AdvancedStats } from './AdvancedStats';
 import { SolarPanel } from './SolarPanel';
 import { SolarPanelConfig } from './types/roof.types';
 
@@ -239,6 +240,8 @@ export const RoofDesigner: React.FC = () => {
           stats={stats}
           onResetCamera={handleResetCamera}
         />
+        
+        <AdvancedStats stats={stats} />
       </div>
     </div>
   );
