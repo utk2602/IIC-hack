@@ -4,11 +4,35 @@ export interface RoofDimensions {
   height: number;
 }
 
+export interface SolarPanelConfig {
+  // Dimensions
+  width: number;
+  height: number;
+  thickness: number;
+  
+  // Orientation
+  tilt: number;
+  azimuth: number;
+  isRotationLocked: boolean;
+
+  // Light Source
+  lightAzimuth: number;
+  lightElevation: number;
+  lightIntensity: number;
+  lightColor: string; // 'warm' | 'cool' | 'daylight'
+
+  // Grid & Display
+  showGrid: boolean;
+  gridSize: number;
+  panelColor: string;
+  showMeasurements: boolean;
+  showLightDirection: boolean;
+  showNormalVector: boolean;
+}
+
 export interface RoofState {
   dimensions: RoofDimensions;
-  showGrid: boolean;
-  showMeasurements: boolean;
-  rotation: number;
+  config: SolarPanelConfig;
 }
 
 export interface ViewStats {
@@ -18,6 +42,8 @@ export interface ViewStats {
   panelCount: number;
   systemSize: number;
   panelTilt: number;
+  efficiency: number;
+  incidentAngle: number;
 }
 
 export interface SolarPanel {
