@@ -85,9 +85,7 @@ export const RoofDesigner: React.FC = () => {
                 <SolarPanel 
                   key={panel.id}
                   position={panel.position}
-                  // Apply tilt relative to flat roof
-                  // X-axis rotation allows tilting "up" 
-                  rotation={[-(tilt * Math.PI / 180), 0, 0]} 
+                  tilt={tilt}
                   isValid={panel.isValid}
                 />
               ))}

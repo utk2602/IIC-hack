@@ -1,13 +1,13 @@
 import { useState, useCallback } from 'react';
-import { Panel, RoofDimensions } from '../types/roof.types';
+import {SolarPanel,  RoofDimensions } from '../types/roof.types';
 import * as THREE from 'three';
 
 export const useSolarSystem = (dimensions: RoofDimensions) => {
-  const [panels, setPanels] = useState<Panel[]>([]);
+  const [panels, setPanels] = useState<SolarPanel[]>([]);
   const [tilt, setTilt] = useState(0);
 
   const addPanel = useCallback((position: [number, number, number]) => {
-    const newPanel: Panel = {
+    const newPanel: SolarPanel = {
       id: crypto.randomUUID(),
       position,
       rotation: [0, 0, 0],

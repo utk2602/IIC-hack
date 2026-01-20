@@ -1,5 +1,5 @@
 import React from 'react';
-import { Camera, Grid, Ruler, Maximize, Trash2, Zap, RotateCw } from 'lucide-react';
+import { Camera, Grid, Ruler, Trash2, Zap, RotateCw } from 'lucide-react';
 import { ViewStats } from './types/roof.types';
 
 interface ControlsProps {
@@ -25,7 +25,7 @@ export const Controls: React.FC<ControlsProps> = ({
 }) => {
   return (
     <>
-      {/* Top Right Controls */}
+      
       <div className="absolute top-4 right-4 flex flex-col gap-2 bg-white/90 p-4 rounded-xl shadow-lg backdrop-blur-sm pointer-events-auto w-64">
         <h3 className="text-sm font-semibold text-gray-500 mb-2 uppercase tracking-wider">View Options</h3>
         
@@ -85,7 +85,7 @@ export const Controls: React.FC<ControlsProps> = ({
         </button>
       </div>
 
-      {/* Bottom Left Stats */}
+      
       <div className="absolute bottom-4 left-4 bg-white/90 p-4 rounded-xl shadow-lg backdrop-blur-sm min-w-[240px] pointer-events-auto">
         <div className="flex items-center gap-2 mb-3 text-gray-500">
            <Zap size={16} className="text-yellow-500" />

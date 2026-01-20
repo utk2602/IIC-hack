@@ -1,14 +1,16 @@
 import React, { useMemo } from 'react';
 import { Box, Edges, Html } from '@react-three/drei';
+import { ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
 import { RoofDimensions } from './types/roof.types';
 
 interface RoofProps {
   dimensions: RoofDimensions;
   showMeasurements: boolean;
+  onRoofClick?: (position: [number, number, number]) => void;
 }
 
-export const Roof: React.FC<RoofProps> = ({ dimensions, showMeasurements }) => {
+export const Roof: React.FC<RoofProps> = ({ dimensions, showMeasurements, onRoofClick }) => {
   const { width, length, height } = dimensions;
 
   // Measurement Label Component
@@ -22,7 +24,15 @@ export const Roof: React.FC<RoofProps> = ({ dimensions, showMeasurements }) => {
 
   return (
     <group position={[0, height / 2, 0]}>
-      <Box args={[width, height, length]} castShadow receiveShadow>
+      <Box 
+        args={[width, height, length]} 
+        castShadow 
+        receiveShadow
+        onClick={(e: ThreeEvent<MouseEvent>) => {
+          e.stopPropagation();
+          onRoofClick?.([e.point.x, e.point.y, e.point.z]);
+        }}
+      >
         <meshStandardMaterial
           color="#4a4a4a"
           roughness={0.9}

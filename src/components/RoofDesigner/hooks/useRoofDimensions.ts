@@ -12,7 +12,6 @@ export const useRoofDimensions = (initialDimensions?: RoofDimensions) => {
 
   const stats = useMemo(() => {
     const area = dimensions.width * dimensions.length;
-    // Assuming 10% setback/obstacles for simple available space calculation
     const availableSpace = area * 0.9;
     
     return {

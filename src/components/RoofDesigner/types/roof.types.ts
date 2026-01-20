@@ -15,4 +15,14 @@ export interface ViewStats {
   area: number;
   availableSpace: number;
   viewAngle: string;
+  panelCount: number;
+  systemSize: number;
+  panelTilt: number;
+}
+
+export interface SolarPanel {
+  id: string;
+  position: [number, number, number];
+  rotation: [number, number, number];
+  isValid: boolean;
 }
