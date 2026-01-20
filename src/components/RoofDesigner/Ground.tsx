@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plane, GridHelper } from '@react-three/drei';
+import { Plane } from '@react-three/drei';
 
 interface GroundProps {
   showGrid?: boolean;
