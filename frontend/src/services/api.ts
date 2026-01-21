@@ -1,14 +1,28 @@
 /**
  * API Service - Connects frontend to backend
  * Handles all communication with the Node.js/Express server
+ * Includes automatic fallback to mock data when ML API is unavailable
  */
 
+import { 
+  mockPredictEfficiency, 
+  mockPredictDegradation, 
+  mockOptimizeTilt, 
+  mockClassifyPanel,
+} from './mockData';
+
 const API_BASE_URL = 'http://localhost:3001/api';
+
+// Track API health for intelligent fallback
+let apiHealthy = true;
+let lastHealthCheck = 0;
+const HEALTH_CHECK_INTERVAL = 30000; // 30 seconds
 
 interface ApiResponse<T> {
   success: boolean;
   data?: T;
   error?: string;
+  source?: 'api' | 'mock-fallback';
 }
 
 async function fetchApi<T>(
@@ -30,9 +44,14 @@ async function fetchApi<T>(
       throw new Error(data.error || 'API request failed');
     }
 
-    return data;
+    // Mark API as healthy on successful response
+    apiHealthy = true;
+    lastHealthCheck = Date.now();
+
+    return { ...data, source: 'api' };
   } catch (error) {
     console.error(`API Error (${endpoint}):`, error);
+    apiHealthy = false;
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -40,10 +59,33 @@ async function fetchApi<T>(
   }
 }
 
+/**
+ * Check if we should use fallback data
+ * Exported for use in components that need to check API health
+ */
+export function shouldUseFallback(): boolean {
+  // If last health check was recent and API was unhealthy, use fallback
+  if (!apiHealthy && (Date.now() - lastHealthCheck) < HEALTH_CHECK_INTERVAL) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Get current API health status
+ */
+export function getApiHealthStatus(): { healthy: boolean; lastCheck: number } {
+  return { healthy: apiHealthy, lastCheck: lastHealthCheck };
+}
+
 // ==================== Health Check ====================
 
 export async function checkHealth() {
-  return fetchApi<{ status: string; version: string }>('/health');
+  const result = await fetchApi<{ status: string; version: string }>('/health');
+  if (!result.success) {
+    apiHealthy = false;
+  }
+  return result;
 }
 
 // ==================== ML Predictions ====================
@@ -67,7 +109,7 @@ export interface EfficiencyPredictionResult {
   efficiencyLossPercent: string;
   panelStatus: string;
   mlRecommendation: string;
-  source: 'ml-model' | 'simulation';
+  source: 'ml-model' | 'simulation' | 'mock-fallback';
   predictedEfficiency: string;
   factors: {
     tiltImpact: string;
@@ -78,11 +120,37 @@ export interface EfficiencyPredictionResult {
   recommendations: string[];
 }
 
-export async function predictEfficiency(input: EfficiencyPredictionInput) {
-  return fetchApi<EfficiencyPredictionResult>('/ml/predict/efficiency', {
+export async function predictEfficiency(input: EfficiencyPredictionInput): Promise<ApiResponse<EfficiencyPredictionResult>> {
+  // Try API first
+  const result = await fetchApi<EfficiencyPredictionResult>('/ml/predict/efficiency', {
     method: 'POST',
     body: JSON.stringify(input),
   });
+  
+  // If API fails, use fallback mock data
+  if (!result.success) {
+    console.log('⚠️ ML API unavailable, using physics-based fallback');
+    const mockResult = mockPredictEfficiency({
+      temperature: input.temperature,
+      humidity: input.humidity,
+      windSpeed: input.windSpeed,
+      irradiance: input.irradiance,
+      voltage: input.voltage,
+      current: input.current,
+      daysSinceInstallation: input.daysSinceInstallation,
+      tilt: input.tilt,
+      cloudCover: input.cloudCover,
+      soilingLevel: input.soilingLevel,
+    });
+    
+    return {
+      success: true,
+      data: mockResult as unknown as EfficiencyPredictionResult,
+      source: 'mock-fallback',
+    };
+  }
+  
+  return result;
 }
 
 export interface DegradationPredictionInput {
@@ -119,11 +187,35 @@ export interface DegradationPredictionResult {
   }>;
 }
 
-export async function predictDegradation(input: DegradationPredictionInput) {
-  return fetchApi<DegradationPredictionResult>('/ml/predict/degradation', {
+export async function predictDegradation(input: DegradationPredictionInput): Promise<ApiResponse<DegradationPredictionResult>> {
+  const result = await fetchApi<DegradationPredictionResult>('/ml/predict/degradation', {
     method: 'POST',
     body: JSON.stringify(input),
   });
+  
+  // If API fails, use fallback mock data
+  if (!result.success) {
+    console.log('⚠️ ML API unavailable for degradation, using physics-based fallback');
+    const mockResult = mockPredictDegradation({
+      panelId: input.panelId,
+      temperature: input.temperature,
+      humidity: input.humidity,
+      voltageMax: input.voltageMax,
+      voltageMin: input.voltageMin,
+      currentMax: input.currentMax,
+      currentMin: input.currentMin,
+      daysSinceInstallation: input.daysSinceInstallation,
+      projectionMonths: input.projectionMonths,
+    });
+    
+    return {
+      success: true,
+      data: mockResult as unknown as DegradationPredictionResult,
+      source: 'mock-fallback',
+    };
+  }
+  
+  return result;
 }
 
 // ==================== ML Model Status ====================
@@ -257,6 +349,7 @@ export async function classifyPanelImage(imageFile: File): Promise<{
   success: boolean;
   data?: PanelClassificationResult;
   error?: string;
+  source?: 'api' | 'mock-fallback';
 }> {
   try {
     const formData = new FormData();
@@ -273,12 +366,20 @@ export async function classifyPanelImage(imageFile: File): Promise<{
       throw new Error(result.error || 'Classification failed');
     }
     
-    return result;
+    apiHealthy = true;
+    return { ...result, source: 'api' };
   } catch (error) {
     console.error('Panel classification error:', error);
+    apiHealthy = false;
+    
+    // Use mock fallback for image classification
+    console.log('⚠️ ML API unavailable for image classification, using mock fallback');
+    const mockResult = mockClassifyPanel(imageFile.name, imageFile.size);
+    
     return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Classification failed',
+      success: true,
+      data: mockResult as unknown as PanelClassificationResult,
+      source: 'mock-fallback',
     };
   }
 }
@@ -308,6 +409,7 @@ export async function classifyPanelImagesBatch(imageFiles: File[]): Promise<{
       throw new Error(result.error || 'Batch classification failed');
     }
     
+    apiHealthy = true;
     return result;
   } catch (error) {
     console.error('Batch classification error:', error);
@@ -390,6 +492,7 @@ export async function optimizeTiltAngle(input: TiltOptimizationInput): Promise<{
   success: boolean;
   data?: TiltOptimizationResult;
   error?: string;
+  source?: 'api' | 'mock-fallback';
 }> {
   try {
     const response = await fetch(`${API_BASE_URL}/ml/optimize/tilt`, {
@@ -406,12 +509,28 @@ export async function optimizeTiltAngle(input: TiltOptimizationInput): Promise<{
       throw new Error(result.error || 'Optimization failed');
     }
 
-    return result;
+    apiHealthy = true;
+    return { ...result, source: 'api' };
   } catch (error) {
     console.error('Tilt optimization error:', error);
+    apiHealthy = false;
+    
+    // Use mock fallback for tilt optimization
+    console.log('⚠️ ML API unavailable for tilt optimization, using physics-based fallback');
+    const mockResult = mockOptimizeTilt({
+      latitude: input.latitude,
+      ghi: input.ghi,
+      hour: input.hour,
+      temperature: input.temperature,
+      humidity: input.humidity,
+      windSpeed: input.windSpeed,
+      currentTilt: input.currentTilt,
+    });
+    
     return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Optimization failed',
+      success: true,
+      data: mockResult as unknown as TiltOptimizationResult,
+      source: 'mock-fallback',
     };
   }
 }
