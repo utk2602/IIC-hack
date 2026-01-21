@@ -4,6 +4,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Visualizer } from './pages/Visualizer';
 import { DataUpload } from './pages/DataUpload';
 import { Reports } from './pages/Reports';
+import { PanelDefectDetector } from './components/PanelDefectDetector/PanelDefectDetector';
 
 function App() {
   const [currentView, setCurrentView] = useState('dashboard');
@@ -16,6 +17,8 @@ function App() {
         return <Visualizer />;
       case 'upload':
         return <DataUpload />;
+      case 'defect-detection':
+        return <PanelDefectDetector />;
       case 'reports':
         return <Reports />;
       default:

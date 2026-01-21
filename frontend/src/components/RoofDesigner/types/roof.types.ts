@@ -44,6 +44,24 @@ export interface ViewStats {
   panelTilt: number;
   efficiency: number;
   incidentAngle: number;
+  // ML-specific fields
+  mlSource?: 'ml-model' | 'geometric';
+  mlLoading?: boolean;
+  mlError?: string | null;
+  mlPrediction?: {
+    efficiencyLoss: number;
+    panelStatus: string;
+    mlRecommendation: string;
+    source: 'ml-model' | 'simulation';
+    factors?: {
+      tiltImpact: string;
+      temperatureImpact: string;
+      cloudImpact: string;
+      soilingImpact: string;
+    };
+    recommendations?: string[];
+  } | null;
+  geometricEfficiency?: number;
 }
 
 export interface SolarPanel {

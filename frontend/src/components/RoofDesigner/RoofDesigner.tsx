@@ -1,4 +1,4 @@
-import React, { Suspense, useState, useRef, useMemo } from 'react';
+import React, { Suspense, useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
 import * as THREE from 'three';
@@ -9,6 +9,7 @@ import { Controls } from './Controls';
 import { AdvancedStats } from './AdvancedStats';
 import { SolarPanel } from './SolarPanel';
 import { SolarPanelConfig } from './types/roof.types';
+import { predictEfficiency, EfficiencyPredictionResult } from '../../services/api';
 
 const SceneController = ({ onStatsUpdate }: { onStatsUpdate: (angle: string) => void }) => {
   const { camera } = useThree();
@@ -40,6 +41,11 @@ export const RoofDesigner: React.FC = () => {
   const [viewAngle, setViewAngle] = useState('0°');
   const cameraRef = useRef<THREE.PerspectiveCamera>(null);
 
+  // ML Prediction State
+  const [mlPrediction, setMlPrediction] = useState<EfficiencyPredictionResult | null>(null);
+  const [mlLoading, setMlLoading] = useState(false);
+  const [mlError, setMlError] = useState<string | null>(null);
+
   // Initial Configuration State
   const [config, setConfig] = useState<SolarPanelConfig>({
     width: 1.7,
@@ -70,6 +76,55 @@ export const RoofDesigner: React.FC = () => {
        cameraRef.current.lookAt(0, 0, 0);
     }
   };
+
+  // Fetch ML prediction when config changes
+  const fetchMLPrediction = useCallback(async () => {
+    setMlLoading(true);
+    setMlError(null);
+    
+    try {
+      // Map config panel values to ML model inputs
+      // Using light elevation as a proxy for irradiance (higher sun = more irradiance)
+      const irradiance = 200 + (config.lightElevation / 90) * 800; // 200-1000 W/m²
+      // Temperature estimate based on light intensity
+      const temperature = 15 + config.lightIntensity * 20; // 15-35°C range
+      
+      const result = await predictEfficiency({
+        temperature: temperature,
+        humidity: 50, // Default moderate humidity
+        windSpeed: 3, // Default moderate wind
+        irradiance: irradiance,
+        voltage: 35, // Typical panel voltage
+        current: 8, // Typical panel current
+        daysSinceInstallation: 365, // 1 year old
+        tilt: config.tilt,
+        cloudCover: config.lightColor === 'cool' ? 60 : config.lightColor === 'warm' ? 10 : 30,
+        soilingLevel: 5, // 5% default soiling
+      });
+      
+      if (result.success && result.data) {
+        setMlPrediction(result.data);
+      } else {
+        setMlError(result.error || 'Failed to get prediction');
+      }
+    } catch (err) {
+      setMlError(err instanceof Error ? err.message : 'ML prediction failed');
+    } finally {
+      setMlLoading(false);
+    }
+  }, [config]); // React to ALL config changes
+
+  // Debounce ML predictions - reduced to 100ms for faster response
+  useEffect(() => {
+    // Show loading immediately
+    setMlLoading(true);
+    
+    const timeoutId = setTimeout(() => {
+      fetchMLPrediction();
+    }, 100); // 100ms debounce - much more responsive
+    
+    return () => clearTimeout(timeoutId);
+  }, [fetchMLPrediction]);
 
   // Physics & Efficiency Calculation
   const stats = useMemo(() => {
@@ -177,7 +232,16 @@ export const RoofDesigner: React.FC = () => {
     const dot = Nx_final * Lx_final + Ny_final * Ly + Nz_final * Lz_final;
     const incidentAngleRad = Math.acos(Math.max(-1, Math.min(1, dot)));
     const incidentAngleDeg = (incidentAngleRad * 180) / Math.PI;
-    const efficiency = Math.max(0, dot) * 100;
+    const geometricEfficiency = Math.max(0, dot) * 100;
+    
+    // Use ML model efficiency if available, otherwise fall back to geometric calculation
+    // ML API returns predictedEfficiency as a string (e.g., "83.2")
+    const mlEfficiency = mlPrediction?.predictedEfficiency 
+      ? parseFloat(mlPrediction.predictedEfficiency) 
+      : null;
+    const efficiency = mlEfficiency !== null && !isNaN(mlEfficiency) 
+      ? mlEfficiency 
+      : geometricEfficiency;
 
     return {
       area: config.width * config.height,
@@ -187,9 +251,15 @@ export const RoofDesigner: React.FC = () => {
       systemSize: 0.4,
       panelTilt: config.tilt,
       efficiency,
-      incidentAngle: incidentAngleDeg
+      incidentAngle: incidentAngleDeg,
+      // Add ML-specific data
+      mlSource: mlPrediction ? 'ml-model' : 'geometric',
+      mlLoading,
+      mlError,
+      mlPrediction,
+      geometricEfficiency, // Keep for comparison
     };
-  }, [config, viewAngle]);
+  }, [config, viewAngle, mlPrediction, mlLoading, mlError]);
 
   return (
     <div className="relative w-full h-screen bg-gray-50 flex flex-col">

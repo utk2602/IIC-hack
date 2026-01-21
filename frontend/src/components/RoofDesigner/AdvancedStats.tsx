@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldCheck, AlertTriangle, Calendar, BrainCircuit, TrendingDown, Info, CheckCircle2 } from 'lucide-react';
+import { ShieldCheck, AlertTriangle, Calendar, BrainCircuit, TrendingDown, Info, CheckCircle2, Loader2, Wifi, WifiOff } from 'lucide-react';
 import { ViewStats } from './types/roof.types';
 
 interface AdvancedStatsProps {
@@ -8,9 +8,12 @@ interface AdvancedStatsProps {
 
 export const AdvancedStats: React.FC<AdvancedStatsProps> = ({ stats }) => {
   const efficiencyLoss = (100 - stats.efficiency).toFixed(1);
-  const degradation = 0.5; // Monthly degradation rate example
   const nextCleaning = new Date();
   nextCleaning.setDate(nextCleaning.getDate() + 14);
+
+  // Determine status badge based on ML connection
+  const isMLConnected = stats.mlSource === 'ml-model';
+  const isLoading = stats.mlLoading;
 
   return (
     <div className="absolute bottom-4 left-4 flex flex-col gap-4 w-96 max-h-[60vh] overflow-y-auto z-10 custom-scrollbar pr-1 pb-1">
@@ -21,21 +24,42 @@ export const AdvancedStats: React.FC<AdvancedStatsProps> = ({ stats }) => {
             <BrainCircuit className="w-5 h-5 text-blue-600" />
             AI Performance Analysis
           </h3>
-          <span className="text-xs bg-green-100 text-green-700 font-bold px-2 py-1 rounded-full flex items-center gap-1">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+          {isLoading ? (
+            <span className="text-xs bg-blue-100 text-blue-700 font-bold px-2 py-1 rounded-full flex items-center gap-1">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Loading
             </span>
-            Live
-          </span>
+          ) : isMLConnected ? (
+            <span className="text-xs bg-purple-100 text-purple-700 font-bold px-2 py-1 rounded-full flex items-center gap-1">
+              <Wifi className="w-3 h-3" />
+              ML Model
+            </span>
+          ) : (
+            <span className="text-xs bg-amber-100 text-amber-700 font-bold px-2 py-1 rounded-full flex items-center gap-1">
+              <WifiOff className="w-3 h-3" />
+              Geometric
+            </span>
+          )}
         </div>
         
         <div className="p-4 space-y-4">
           {/* Main Efficiency Meter */}
           <div>
             <div className="flex justify-between items-end mb-2">
-              <span className="text-sm font-medium text-gray-600">Current Efficiency</span>
-              <span className="text-2xl font-bold text-blue-600">{stats.efficiency.toFixed(1)}%</span>
+              <div className="flex flex-col">
+                <span className="text-sm font-medium text-gray-600">Current Efficiency</span>
+                {isMLConnected && stats.geometricEfficiency !== undefined && (
+                  <span className="text-xs text-gray-400">
+                    Geometric: {stats.geometricEfficiency.toFixed(1)}%
+                  </span>
+                )}
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-bold text-blue-600">{stats.efficiency.toFixed(1)}%</span>
+                {isMLConnected && (
+                  <span className="text-xs text-purple-500 font-medium">ML</span>
+                )}
+              </div>
             </div>
             <div className="relative h-2 bg-gray-200 rounded-full overflow-hidden">
               <div 
@@ -50,28 +74,46 @@ export const AdvancedStats: React.FC<AdvancedStatsProps> = ({ stats }) => {
 
           {/* Loss Breakdown */}
           <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
-            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Loss Breakdown</h4>
+            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">
+              Loss Breakdown 
+              {isMLConnected && <span className="text-purple-500 ml-1">(ML)</span>}
+            </h4>
             <div className="space-y-2">
               <div className="flex justify-between items-center text-sm">
                 <span className="flex items-center gap-2 text-slate-600">
                   <span className="w-2 h-2 rounded-full bg-yellow-400" />
-                  Incidence Angle
+                  {isMLConnected ? 'Tilt Impact' : 'Incidence Angle'}
                 </span>
-                <span className="font-medium text-slate-800">{(100 - stats.efficiency).toFixed(1)}%</span>
+                <span className="font-medium text-slate-800">
+                  {stats.mlPrediction?.factors?.tiltImpact || `${(100 - stats.efficiency).toFixed(1)}%`}
+                </span>
               </div>
               <div className="flex justify-between items-center text-sm">
                 <span className="flex items-center gap-2 text-slate-600">
                   <span className="w-2 h-2 rounded-full bg-orange-400" />
-                  Thermal Drift
+                  {isMLConnected ? 'Temperature Impact' : 'Thermal Drift'}
                 </span>
-                <span className="font-medium text-slate-800">2.1%</span>
+                <span className="font-medium text-slate-800">
+                  {stats.mlPrediction?.factors?.temperatureImpact || '2.1%'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="flex items-center gap-2 text-slate-600">
+                  <span className="w-2 h-2 rounded-full bg-blue-400" />
+                  {isMLConnected ? 'Cloud Cover' : 'Weather'}
+                </span>
+                <span className="font-medium text-slate-800">
+                  {stats.mlPrediction?.factors?.cloudImpact || '0.0%'}
+                </span>
               </div>
               <div className="flex justify-between items-center text-sm">
                 <span className="flex items-center gap-2 text-slate-600">
                   <span className="w-2 h-2 rounded-full bg-gray-400" />
                   Soiling (Dust)
                 </span>
-                <span className="font-medium text-slate-800">1.4%</span>
+                <span className="font-medium text-slate-800">
+                  {stats.mlPrediction?.factors?.soilingImpact || '1.4%'}
+                </span>
               </div>
             </div>
           </div>
@@ -120,12 +162,31 @@ export const AdvancedStats: React.FC<AdvancedStatsProps> = ({ stats }) => {
            <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
                 <ShieldCheck className="w-4 h-4 text-green-500" />
-                System Health
+                Panel Status
               </div>
-              <span className="text-xs font-bold text-green-600 bg-green-100 px-2 py-1 rounded-full">
-                OPTIMAL
+              <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                stats.mlPrediction?.panelStatus === 'optimal' || stats.efficiency > 80
+                  ? 'text-green-600 bg-green-100'
+                  : stats.mlPrediction?.panelStatus === 'good' || stats.efficiency > 60
+                  ? 'text-blue-600 bg-blue-100'
+                  : stats.mlPrediction?.panelStatus === 'fair' || stats.efficiency > 40
+                  ? 'text-amber-600 bg-amber-100'
+                  : 'text-red-600 bg-red-100'
+              }`}>
+                {stats.mlPrediction?.panelStatus?.toUpperCase() || (stats.efficiency > 80 ? 'OPTIMAL' : stats.efficiency > 60 ? 'GOOD' : stats.efficiency > 40 ? 'FAIR' : 'POOR')}
               </span>
            </div>
+
+           {/* ML Recommendation */}
+           {stats.mlPrediction?.mlRecommendation && (
+             <>
+               <div className="h-px bg-gray-100" />
+               <div className="bg-purple-50 rounded-lg p-3 border border-purple-100">
+                 <h4 className="text-xs font-bold text-purple-600 uppercase tracking-widest mb-1">AI Recommendation</h4>
+                 <p className="text-sm text-purple-800">{stats.mlPrediction.mlRecommendation}</p>
+               </div>
+             </>
+           )}
         </div>
       </div>
     </div>

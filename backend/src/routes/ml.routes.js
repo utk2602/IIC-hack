@@ -20,6 +20,14 @@ const imageUpload = multer({
 // POST /api/ml/analyze - General ML analysis endpoint
 router.post('/analyze', mlController.analyzeData);
 
+// ========== IMAGE CLASSIFICATION (Real PyTorch Model) ==========
+// POST /api/ml/image/classify-panel - Classify single panel image for defects
+router.post('/image/classify-panel', imageUpload.single('image'), mlController.classifyPanelDefect);
+
+// POST /api/ml/image/classify-panel/batch - Batch classification
+router.post('/image/classify-panel/batch', imageUpload.array('images', 20), mlController.classifyPanelDefectBatch);
+
+// ========== LEGACY IMAGE ENDPOINTS (Simulated) ==========
 // POST /api/ml/image/defect-detection - Detect defects in panel images
 router.post('/image/defect-detection', imageUpload.single('image'), mlController.detectDefects);
 

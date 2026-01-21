@@ -1,6 +1,6 @@
 """
 Flask ML API for Solar Panel Analysis
-Serves predictions from the trained efficiency loss model
+Serves predictions from the trained efficiency loss model and image classification
 """
 
 from flask import Flask, request, jsonify
@@ -8,27 +8,59 @@ from flask_cors import CORS
 import joblib
 import numpy as np
 import os
+import io
+import base64
+import torch
+import torch.nn as nn
+from torchvision import transforms, models
+from PIL import Image
 
 app = Flask(__name__)
 CORS(app)
 
-# Load the trained model
+# ============ EFFICIENCY LOSS MODEL ============
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "efficiency_loss_model.pkl")
 
 try:
     model = joblib.load(MODEL_PATH)
-    print(f" Model loaded successfully from {MODEL_PATH}")
+    print(f"✅ Efficiency model loaded successfully from {MODEL_PATH}")
 except Exception as e:
-    print(f" Error loading model: {e}")
+    print(f"⚠️ Error loading efficiency model: {e}")
     model = None
+
+# ============ IMAGE CLASSIFICATION MODEL ============
+IMAGE_MODEL_PATH = os.path.join(os.path.dirname(__file__), "pv_classifier.pth")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+try:
+    # Initialize ResNet18 architecture
+    image_model = models.resnet18(weights=None)
+    image_model.fc = nn.Linear(image_model.fc.in_features, 2)
+    image_model.load_state_dict(torch.load(IMAGE_MODEL_PATH, map_location=device))
+    image_model = image_model.to(device)
+    image_model.eval()
+    print(f"✅ Image classifier loaded successfully from {IMAGE_MODEL_PATH}")
+    print(f"   Running on: {device}")
+except Exception as e:
+    print(f"⚠️ Error loading image classifier: {e}")
+    image_model = None
+
+# Image preprocessing transforms (same as training)
+image_transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+])
 
 
 @app.route("/health", methods=["GET"])
 def health():
     """Health check endpoint"""
     return jsonify({
-        "status": "ok" if model is not None else "error",
+        "status": "ok" if model is not None else "partial",
         "model_loaded": model is not None,
+        "image_classifier_loaded": image_model is not None,
+        "device": str(device),
         "service": "solar-ml-api"
     })
 
@@ -253,17 +285,204 @@ def model_info():
             "current",
             "days_since_installation"
         ],
-        "target": "efficiency_loss"
+        "target": "efficiency_loss",
+        "image_classifier": {
+            "loaded": image_model is not None,
+            "architecture": "ResNet18",
+            "classes": ["DEFECTIVE (BAD) - Class 0", "NORMAL (GOOD) - Class 1"],
+            "class_order_note": "ImageFolder sorts alphabetically: bad=0, good=1",
+            "input_size": "224x224",
+            "device": str(device)
+        }
     })
 
 
+# ============ IMAGE CLASSIFICATION ENDPOINTS ============
+
+@app.route("/predict/panel-defect", methods=["POST"])
+def predict_panel_defect():
+    """
+    Classify a solar panel image as Normal or Defective
+    
+    Accepts:
+    - multipart/form-data with 'image' file
+    - JSON with 'image_base64' field (base64 encoded image)
+    """
+    if image_model is None:
+        return jsonify({"error": "Image classifier not loaded"}), 500
+    
+    try:
+        img = None
+        
+        # Check for file upload
+        if 'image' in request.files:
+            file = request.files['image']
+            if file.filename == '':
+                return jsonify({"error": "No file selected"}), 400
+            img = Image.open(file.stream).convert("RGB")
+        
+        # Check for base64 encoded image
+        elif request.is_json and 'image_base64' in request.json:
+            image_data = request.json['image_base64']
+            # Remove data URL prefix if present
+            if ',' in image_data:
+                image_data = image_data.split(',')[1]
+            image_bytes = base64.b64decode(image_data)
+            img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        
+        else:
+            return jsonify({"error": "No image provided. Use 'image' file or 'image_base64' JSON field"}), 400
+        
+        # Preprocess image
+        img_tensor = image_transform(img).unsqueeze(0).to(device)
+        
+        # Run inference
+        with torch.no_grad():
+            output = image_model(img_tensor)
+            probabilities = torch.nn.functional.softmax(output, dim=1)[0]
+            pred_class = torch.argmax(output, dim=1).item()
+        
+        # Map prediction to labels
+        # IMPORTANT: ImageFolder sorts classes alphabetically!
+        # bad -> Class 0, good -> Class 1
+        label_map = {0: "DEFECTIVE", 1: "NORMAL"}
+        status_map = {0: "bad", 1: "good"}
+        
+        confidence = float(probabilities[pred_class]) * 100
+        
+        # Generate recommendations based on result
+        if pred_class == 1:  # Normal (Class 1 = good folder)
+            recommendation = "Panel appears healthy. Continue regular monitoring."
+            severity = "none"
+            action_required = False
+        else:  # Defective (Class 0 = bad folder)
+            if confidence > 90:
+                recommendation = "High confidence defect detected! Schedule immediate inspection."
+                severity = "critical"
+            elif confidence > 70:
+                recommendation = "Likely defect detected. Schedule inspection within 1 week."
+                severity = "high"
+            else:
+                recommendation = "Possible defect detected. Monitor closely and verify manually."
+                severity = "medium"
+            action_required = True
+        
+        return jsonify({
+            "success": True,
+            "prediction": {
+                "label": label_map[pred_class],
+                "status": status_map[pred_class],
+                "class_id": pred_class,
+                "confidence": round(confidence, 2),
+                "confidence_percent": f"{round(confidence, 2)}%"
+            },
+            "probabilities": {
+                # Class 0 = defective (bad), Class 1 = normal (good)
+                "defective": round(float(probabilities[0]) * 100, 2),
+                "normal": round(float(probabilities[1]) * 100, 2)
+            },
+            "analysis": {
+                "severity": severity,
+                "action_required": action_required,
+                "recommendation": recommendation
+            },
+            "model_info": {
+                "architecture": "ResNet18",
+                "device": str(device),
+                "input_size": "224x224"
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/predict/panel-defect/batch", methods=["POST"])
+def predict_panel_defect_batch():
+    """
+    Batch classification for multiple panel images
+    
+    Accepts multipart/form-data with multiple 'images' files
+    """
+    if image_model is None:
+        return jsonify({"error": "Image classifier not loaded"}), 500
+    
+    try:
+        if 'images' not in request.files:
+            return jsonify({"error": "No images provided"}), 400
+        
+        files = request.files.getlist('images')
+        if len(files) == 0:
+            return jsonify({"error": "No images provided"}), 400
+        
+        results = []
+        normal_count = 0
+        defective_count = 0
+        
+        for idx, file in enumerate(files):
+            try:
+                img = Image.open(file.stream).convert("RGB")
+                img_tensor = image_transform(img).unsqueeze(0).to(device)
+                
+                with torch.no_grad():
+                    output = image_model(img_tensor)
+                    probabilities = torch.nn.functional.softmax(output, dim=1)[0]
+                    pred_class = torch.argmax(output, dim=1).item()
+                
+                # Class 0 = bad (defective), Class 1 = good (normal) - alphabetical order
+                label_map = {0: "DEFECTIVE", 1: "NORMAL"}
+                confidence = float(probabilities[pred_class]) * 100
+                
+                if pred_class == 1:  # Normal
+                    normal_count += 1
+                else:  # Defective (Class 0)
+                    defective_count += 1
+                
+                results.append({
+                    "index": idx,
+                    "filename": file.filename,
+                    "prediction": label_map[pred_class],
+                    "confidence": round(confidence, 2),
+                    "is_defective": pred_class == 0  # Class 0 is defective
+                })
+                
+            except Exception as e:
+                results.append({
+                    "index": idx,
+                    "filename": file.filename,
+                    "error": str(e)
+                })
+        
+        return jsonify({
+            "success": True,
+            "total_processed": len(results),
+            "summary": {
+                "normal_count": normal_count,
+                "defective_count": defective_count,
+                "defect_rate": round((defective_count / len(results)) * 100, 2) if results else 0
+            },
+            "results": results
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
-    print("Starting Solar ML API...")
-    print("Endpoints:")
-    print("   GET  /health                  - Health check")
-    print("   POST /predict/efficiency-loss - Predict efficiency loss")
-    print("   POST /predict/degradation     - Calculate degradation index")
-    print("   POST /predict/batch           - Batch predictions")
-    print("   GET  /model/info              - Model information")
-    print("")
+    print("\n" + "="*60)
+    print("🌞 Starting Solar ML API...")
+    print("="*60)
+    print("\n📡 Endpoints:")
+    print("   GET  /health                    - Health check")
+    print("   POST /predict/efficiency-loss   - Predict efficiency loss")
+    print("   POST /predict/degradation       - Calculate degradation index")
+    print("   POST /predict/batch             - Batch efficiency predictions")
+    print("   POST /predict/panel-defect      - Classify panel image (defect detection)")
+    print("   POST /predict/panel-defect/batch- Batch image classification")
+    print("   GET  /model/info                - Model information")
+    print("\n📦 Models Loaded:")
+    print(f"   • Efficiency Loss Model: {'✅ Ready' if model else '❌ Not loaded'}")
+    print(f"   • Image Classifier:      {'✅ Ready' if image_model else '❌ Not loaded'}")
+    print(f"   • Device:                {device}")
+    print("\n" + "="*60 + "\n")
     app.run(host="0.0.0.0", port=5001, debug=False)

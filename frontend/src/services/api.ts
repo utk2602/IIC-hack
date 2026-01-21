@@ -195,6 +195,123 @@ export async function getAlerts() {
   return fetchApi<Alert[]>('/alerts');
 }
 
+// ==================== Panel Defect Classification ====================
+
+export interface PanelClassificationResult {
+  analysisId: string;
+  filename: string;
+  fileSize: number;
+  prediction: {
+    label: 'NORMAL' | 'DEFECTIVE';
+    status: 'good' | 'bad';
+    class_id: number;
+    confidence: number;
+    confidence_percent: string;
+  };
+  probabilities: {
+    normal: number;
+    defective: number;
+  };
+  analysis: {
+    severity: 'none' | 'medium' | 'high' | 'critical';
+    action_required: boolean;
+    recommendation: string;
+  };
+  source: 'ml-model' | 'simulation';
+  modelInfo: {
+    architecture: string;
+    classes: string[];
+  };
+  timestamp: string;
+}
+
+export interface BatchClassificationResult {
+  batchId: string;
+  totalProcessed: number;
+  summary: {
+    normal_count: number;
+    defective_count: number;
+    defect_rate: number;
+  };
+  results: Array<{
+    index: number;
+    filename: string;
+    prediction: 'NORMAL' | 'DEFECTIVE';
+    confidence: number;
+    is_defective: boolean;
+  }>;
+  source: 'ml-model' | 'simulation';
+  timestamp: string;
+}
+
+/**
+ * Classify a single panel image for defects using ML model
+ */
+export async function classifyPanelImage(imageFile: File): Promise<{
+  success: boolean;
+  data?: PanelClassificationResult;
+  error?: string;
+}> {
+  try {
+    const formData = new FormData();
+    formData.append('image', imageFile);
+    
+    const response = await fetch(`${API_BASE_URL}/ml/image/classify-panel`, {
+      method: 'POST',
+      body: formData,
+    });
+    
+    const result = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(result.error || 'Classification failed');
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('Panel classification error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Classification failed',
+    };
+  }
+}
+
+/**
+ * Batch classify multiple panel images
+ */
+export async function classifyPanelImagesBatch(imageFiles: File[]): Promise<{
+  success: boolean;
+  data?: BatchClassificationResult;
+  error?: string;
+}> {
+  try {
+    const formData = new FormData();
+    imageFiles.forEach(file => {
+      formData.append('images', file);
+    });
+    
+    const response = await fetch(`${API_BASE_URL}/ml/image/classify-panel/batch`, {
+      method: 'POST',
+      body: formData,
+    });
+    
+    const result = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(result.error || 'Batch classification failed');
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('Batch classification error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Batch classification failed',
+    };
+  }
+}
+
 // Export all
 export const api = {
   checkHealth,
@@ -205,6 +322,8 @@ export const api = {
   getPanels,
   getPanelById,
   getAlerts,
+  classifyPanelImage,
+  classifyPanelImagesBatch,
 };
 
 export default api;

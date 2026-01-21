@@ -142,6 +142,72 @@ exports.detectDefects = (req, res) => {
   }
 };
 
+// POST /api/ml/image/classify-panel - Uses real PyTorch model
+exports.classifyPanelDefect = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No image provided' });
+    }
+
+    // Call the ML service to classify the image
+    const result = await mlService.classifyPanelImage(req.file.buffer, req.file.originalname);
+    
+    if (!result.success) {
+      return res.status(500).json({ success: false, error: result.error || 'Classification failed' });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        analysisId: uuidv4(),
+        filename: req.file.originalname,
+        fileSize: req.file.size,
+        prediction: result.prediction,
+        probabilities: result.probabilities,
+        analysis: result.analysis,
+        source: result.source,
+        modelInfo: result.model_info || {
+          architecture: 'ResNet18',
+          classes: ['NORMAL', 'DEFECTIVE']
+        },
+        timestamp: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// POST /api/ml/image/classify-panel/batch - Batch classification
+exports.classifyPanelDefectBatch = async (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ success: false, error: 'No images provided' });
+    }
+
+    const images = req.files.map(file => ({
+      buffer: file.buffer,
+      filename: file.originalname
+    }));
+
+    const result = await mlService.classifyPanelImagesBatch(images);
+    
+    res.json({
+      success: true,
+      data: {
+        batchId: uuidv4(),
+        totalProcessed: result.total_processed,
+        summary: result.summary,
+        results: result.results,
+        source: result.source,
+        timestamp: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 // POST /api/ml/image/hotspot-detection
 exports.detectHotspots = (req, res) => {
   try {
@@ -313,7 +379,7 @@ exports.predictEfficiency = async (req, res) => {
       date 
     } = req.body;
 
-    // Use real ML model for efficiency loss prediction
+    // Use ML model for efficiency loss prediction with all parameters
     const mlResult = await mlService.predictEfficiencyLoss({
       temperature: temperature || 30,
       humidity: humidity || 60,
@@ -324,39 +390,47 @@ exports.predictEfficiency = async (req, res) => {
       days_since_installation: daysSinceInstallation || 365
     });
 
-    const baseEfficiency = 95;
-    const tiltFactor = tilt ? Math.cos((Math.abs(tilt - 30) * Math.PI) / 180) : 1;
-    const tempFactor = temperature ? Math.max(0.8, 1 - (Math.max(0, temperature - 25) * 0.005)) : 1;
-    const cloudFactor = cloudCover ? 1 - (cloudCover / 100) * 0.3 : 1;
-    const soilingFactor = soilingLevel ? 1 - (soilingLevel / 100) * 0.2 : 1;
+    // Additional geometry-based factors for tilt/cloud/soiling
+    const tiltFactor = tilt !== undefined ? Math.cos((Math.abs(tilt - 30) * Math.PI) / 180) : 1;
+    const cloudFactor = cloudCover !== undefined ? 1 - (cloudCover / 100) * 0.3 : 1;
+    const soilingFactor = soilingLevel !== undefined ? 1 - (soilingLevel / 100) * 0.2 : 1;
 
-    const predictedEfficiency = baseEfficiency * tiltFactor * tempFactor * cloudFactor * soilingFactor;
+    // Use ML predicted efficiency, then apply additional factors
+    const mlEfficiency = parseFloat(mlResult.predicted_efficiency || 85);
+    const finalEfficiency = (mlEfficiency * tiltFactor * cloudFactor * soilingFactor).toFixed(1);
 
     res.json({
       success: true,
       data: {
         predictionId: uuidv4(),
-        // Real ML model results
+        // ML model results - dynamic based on inputs
         efficiencyLoss: mlResult.efficiency_loss,
         efficiencyLossPercent: mlResult.efficiency_loss_percent,
         panelStatus: mlResult.status,
         mlRecommendation: mlResult.recommendation,
         source: mlResult.source,
-        // Calculated efficiency
-        predictedEfficiency: predictedEfficiency.toFixed(2),
+        modelConfidence: mlResult.model_confidence,
+        // Final calculated efficiency with all factors
+        predictedEfficiency: finalEfficiency,
         theoreticalMaximum: 98.0,
+        // Detailed factor breakdown from ML
         factors: {
           tiltImpact: ((1 - tiltFactor) * 100).toFixed(2) + '% loss',
-          temperatureImpact: ((1 - tempFactor) * 100).toFixed(2) + '% loss',
+          temperatureImpact: mlResult.factors?.temperature_impact || '0.00% loss',
+          irradianceImpact: mlResult.factors?.irradiance_impact || '0.00% loss',
           cloudImpact: ((1 - cloudFactor) * 100).toFixed(2) + '% loss',
-          soilingImpact: ((1 - soilingFactor) * 100).toFixed(2) + '% loss'
+          soilingImpact: ((1 - soilingFactor) * 100).toFixed(2) + '% loss',
+          humidityImpact: mlResult.factors?.humidity_impact || '0.00%',
+          windBenefit: mlResult.factors?.wind_benefit || '0.00%',
+          ageDegradation: mlResult.factors?.age_degradation || '0.00%'
         },
         recommendations: [
-          tiltFactor < 0.95 ? `Adjust tilt to ${30}° for optimal angle` : null,
+          tiltFactor < 0.95 ? `Adjust tilt to 30° for optimal angle` : null,
           soilingFactor < 0.95 ? 'Schedule cleaning to improve output' : null,
           mlResult.recommendation
         ].filter(Boolean),
-        modelVersion: modelStatus.efficiencyPredictor.version
+        modelVersion: modelStatus.efficiencyPredictor.version,
+        timestamp: mlResult.timestamp || new Date().toISOString()
       }
     });
   } catch (error) {
