@@ -52,4 +52,11 @@ router.post('/optimize/tilt', mlController.optimizeTilt);
 // GET /api/ml/models/status - Check ML model service status
 router.get('/models/status', mlController.getModelStatus);
 
+// ========== EMAIL ALERTS ==========
+// POST /api/ml/email/test - Test email configuration
+router.post('/email/test', mlController.testEmailConfig);
+
+// GET /api/ml/email/status - Check email service status
+router.get('/email/status', mlController.getEmailStatus);
+
 module.exports = router;

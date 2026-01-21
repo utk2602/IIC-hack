@@ -12,7 +12,9 @@ import {
   Shield,
   AlertCircle,
   FileImage,
-  Sparkles
+  Sparkles,
+  MailCheck,
+  MailX
 } from 'lucide-react';
 import { classifyPanelImage, PanelClassificationResult } from '../../services/api';
 
@@ -367,6 +369,29 @@ export const PanelDefectDetector: React.FC = () => {
                         {analysis.result.modelInfo.architecture}
                       </span>
                     </div>
+
+                    {/* Email Alert Status - Only for defective panels */}
+                    {analysis.result.prediction.label === 'DEFECTIVE' && analysis.result.emailAlert && (
+                      <div className={`flex items-center gap-2 p-2 rounded-lg mt-2 ${
+                        analysis.result.emailAlert.sent 
+                          ? 'bg-green-500/10 border border-green-500/30' 
+                          : 'bg-orange-500/10 border border-orange-500/30'
+                      }`}>
+                        {analysis.result.emailAlert.sent ? (
+                          <>
+                            <MailCheck className="w-4 h-4 text-green-400" />
+                            <span className="text-xs text-green-400">Alert email sent!</span>
+                          </>
+                        ) : (
+                          <>
+                            <MailX className="w-4 h-4 text-orange-400" />
+                            <span className="text-xs text-orange-400">
+                              Email not configured
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

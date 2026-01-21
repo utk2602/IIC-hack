@@ -1,5 +1,6 @@
 const { v4: uuidv4 } = require('uuid');
 const mlService = require('../services/mlService');
+const emailService = require('../services/emailService');
 
 /**
  * ML Controller
@@ -156,22 +157,49 @@ exports.classifyPanelDefect = async (req, res) => {
       return res.status(500).json({ success: false, error: result.error || 'Classification failed' });
     }
 
+    const analysisId = uuidv4();
+    const responseData = {
+      analysisId,
+      filename: req.file.originalname,
+      fileSize: req.file.size,
+      prediction: result.prediction,
+      probabilities: result.probabilities,
+      analysis: result.analysis,
+      source: result.source,
+      modelInfo: result.model_info || {
+        architecture: 'ResNet18',
+        classes: ['NORMAL', 'DEFECTIVE']
+      },
+      timestamp: new Date().toISOString()
+    };
+
+    // 🚨 SEND EMAIL ALERT IF DEFECTIVE PANEL DETECTED
+    if (result.prediction.label === 'DEFECTIVE') {
+      const emailResult = await emailService.sendDefectAlert({
+        recipientEmail: req.body.alertEmail || process.env.ALERT_RECIPIENTS,
+        panelId: analysisId.substring(0, 8).toUpperCase(),
+        prediction: result.prediction.label,
+        confidence: result.prediction.confidence,
+        severity: result.analysis.severity,
+        recommendation: result.analysis.recommendation,
+        filename: req.file.originalname,
+        imageBase64: req.file.buffer.toString('base64')
+      });
+
+      responseData.emailAlert = {
+        sent: emailResult.success,
+        messageId: emailResult.messageId || null,
+        error: emailResult.error || null
+      };
+
+      if (emailResult.success) {
+        console.log(`📧 Alert email sent for defective panel: ${analysisId}`);
+      }
+    }
+
     res.json({
       success: true,
-      data: {
-        analysisId: uuidv4(),
-        filename: req.file.originalname,
-        fileSize: req.file.size,
-        prediction: result.prediction,
-        probabilities: result.probabilities,
-        analysis: result.analysis,
-        source: result.source,
-        modelInfo: result.model_info || {
-          architecture: 'ResNet18',
-          classes: ['NORMAL', 'DEFECTIVE']
-        },
-        timestamp: new Date().toISOString()
-      }
+      data: responseData
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -192,6 +220,37 @@ exports.classifyPanelDefectBatch = async (req, res) => {
 
     const result = await mlService.classifyPanelImagesBatch(images);
     
+    // 🚨 SEND EMAIL ALERTS FOR ALL DEFECTIVE PANELS IN BATCH
+    const defectiveResults = result.results.filter(r => r.prediction?.label === 'DEFECTIVE');
+    const emailAlerts = [];
+
+    if (defectiveResults.length > 0) {
+      const alertRecipient = req.body.alertEmail || process.env.ALERT_RECIPIENTS;
+      
+      for (const defect of defectiveResults) {
+        const matchingFile = req.files.find(f => f.originalname === defect.filename);
+        
+        const emailResult = await emailService.sendDefectAlert({
+          recipientEmail: alertRecipient,
+          panelId: `BATCH-${defect.filename.substring(0, 8).toUpperCase()}`,
+          prediction: defect.prediction.label,
+          confidence: defect.prediction.confidence,
+          severity: defect.analysis?.severity || 'medium',
+          recommendation: defect.analysis?.recommendation || 'Inspect panel for defects',
+          filename: defect.filename,
+          imageBase64: matchingFile ? matchingFile.buffer.toString('base64') : null
+        });
+
+        emailAlerts.push({
+          filename: defect.filename,
+          sent: emailResult.success,
+          messageId: emailResult.messageId || null
+        });
+      }
+
+      console.log(`📧 Sent ${emailAlerts.filter(e => e.sent).length}/${defectiveResults.length} alert emails for batch`);
+    }
+
     res.json({
       success: true,
       data: {
@@ -200,6 +259,11 @@ exports.classifyPanelDefectBatch = async (req, res) => {
         summary: result.summary,
         results: result.results,
         source: result.source,
+        emailAlerts: {
+          defectivePanels: defectiveResults.length,
+          alertsSent: emailAlerts.filter(e => e.sent).length,
+          details: emailAlerts
+        },
         timestamp: new Date().toISOString()
       }
     });
@@ -566,6 +630,75 @@ exports.getModelStatus = async (req, res) => {
           step2: 'ML API runs on http://localhost:5001',
           step3: 'Predictions now use trained RandomForest model'
         }
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// POST /api/ml/email/test - Test email configuration
+exports.testEmailConfig = async (req, res) => {
+  try {
+    const { testEmail } = req.body;
+
+    if (!testEmail) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Please provide testEmail in request body' 
+      });
+    }
+
+    const result = await emailService.testEmailConfiguration(testEmail);
+
+    if (result.success) {
+      res.json({
+        success: true,
+        message: 'Test email sent successfully!',
+        data: {
+          recipient: testEmail,
+          messageId: result.messageId,
+          timestamp: new Date().toISOString()
+        }
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: result.error,
+        hint: 'Check SMTP_USER and SMTP_PASS in your .env file'
+      });
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// GET /api/ml/email/status - Check email service status
+exports.getEmailStatus = (req, res) => {
+  try {
+    const config = emailService.EMAIL_CONFIG;
+    const isConfigured = !!(config.auth.user && config.auth.pass);
+
+    res.json({
+      success: true,
+      data: {
+        configured: isConfigured,
+        host: config.host,
+        port: config.port,
+        secure: config.secure,
+        user: config.auth.user ? `${config.auth.user.substring(0, 5)}...` : 'Not set',
+        alertRecipients: process.env.ALERT_RECIPIENTS ? 'Configured' : 'Not set',
+        status: isConfigured ? 'ready' : 'not_configured',
+        message: isConfigured 
+          ? 'Email service is configured and ready to send alerts'
+          : 'Email service not configured. Set SMTP_USER and SMTP_PASS in .env file',
+        requiredEnvVars: [
+          'SMTP_HOST (default: smtp.gmail.com)',
+          'SMTP_PORT (default: 587)',
+          'SMTP_USER (your email)',
+          'SMTP_PASS (app password)',
+          'ALERT_RECIPIENTS (comma-separated emails)'
+        ]
       }
     });
   } catch (error) {

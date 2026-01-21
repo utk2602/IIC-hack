@@ -223,6 +223,12 @@ export interface PanelClassificationResult {
     classes: string[];
   };
   timestamp: string;
+  // Email alert status (only present when defective panel is detected)
+  emailAlert?: {
+    sent: boolean;
+    messageId: string | null;
+    error: string | null;
+  };
 }
 
 export interface BatchClassificationResult {
