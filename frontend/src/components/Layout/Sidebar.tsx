@@ -7,7 +7,8 @@ import {
   Settings, 
   LogOut,
   Menu,
-  ScanSearch
+  ScanSearch,
+  Compass
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -22,6 +23,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, isCol
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'visualizer', label: 'Solar Visualizer', icon: Sun },
     { id: 'defect-detection', label: 'Defect Detection', icon: ScanSearch },
+    { id: 'tilt-optimizer', label: 'Tilt Optimizer', icon: Compass },
     { id: 'upload', label: 'Data Upload', icon: Upload },
     { id: 'reports', label: 'Reports', icon: FileText },
   ];

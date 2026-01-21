@@ -15,6 +15,9 @@ import torch.nn as nn
 from torchvision import transforms, models
 from PIL import Image
 
+# Import the tilt optimizer
+from optimization.tilt_optimizer import get_optimization_result, find_best_tilt
+
 app = Flask(__name__)
 CORS(app)
 
@@ -468,6 +471,94 @@ def predict_panel_defect_batch():
         return jsonify({"error": str(e)}), 500
 
 
+# ============ TILT OPTIMIZATION ENDPOINT ============
+
+@app.route("/predict/tilt-optimize", methods=["POST"])
+def predict_optimal_tilt():
+    """
+    Find the optimal tilt angle for maximum energy output
+    
+    Expected JSON:
+    {
+        "ghi": float,           # Global Horizontal Irradiance (W/m²)
+        "latitude": float,       # Location latitude
+        "hour": float,           # Hour of day (0-24)
+        "temperature": float,    # Optional, default 25
+        "humidity": float,       # Optional, default 50
+        "wind_speed": float,     # Optional, default 2
+        "voltage": float,        # Optional, default 38
+        "current": float,        # Optional, default 8
+        "days_since_installation": int,  # Optional, default 365
+        "tilt_min": int,         # Optional, default 0
+        "tilt_max": int          # Optional, default 60
+    }
+    """
+    try:
+        data = request.json
+        
+        # Validate required fields
+        required_fields = ["ghi", "latitude", "hour"]
+        for field in required_fields:
+            if field not in data:
+                return jsonify({"error": f"Missing required field: {field}"}), 400
+        
+        # Get optimization result
+        result = get_optimization_result(
+            ghi=float(data["ghi"]),
+            latitude=float(data["latitude"]),
+            hour=float(data["hour"]),
+            temperature=float(data.get("temperature", 25)),
+            humidity=float(data.get("humidity", 50)),
+            wind_speed=float(data.get("wind_speed", 2)),
+            voltage=float(data.get("voltage", 38)),
+            current=float(data.get("current", 8)),
+            days_since_installation=int(data.get("days_since_installation", 365)),
+            tilt_min=int(data.get("tilt_min", 0)),
+            tilt_max=int(data.get("tilt_max", 60))
+        )
+        
+        return jsonify({
+            "success": True,
+            "optimization": result,
+            "source": "ml-model"
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/predict/tilt-optimize/quick", methods=["GET"])
+def quick_tilt_optimize():
+    """
+    Quick tilt optimization using query parameters
+    
+    Example: /predict/tilt-optimize/quick?ghi=800&latitude=28.6&hour=12
+    """
+    try:
+        ghi = float(request.args.get("ghi", 800))
+        latitude = float(request.args.get("latitude", 28.6))
+        hour = float(request.args.get("hour", 12))
+        temperature = float(request.args.get("temperature", 25))
+        
+        result = get_optimization_result(
+            ghi=ghi,
+            latitude=latitude,
+            hour=hour,
+            temperature=temperature
+        )
+        
+        return jsonify({
+            "success": True,
+            "optimal_tilt": result["optimal_tilt"],
+            "estimated_energy": result["estimated_energy"],
+            "improvement_percent": result["improvement_percent"],
+            "solar_elevation": result["solar_elevation"]
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     print("\n" + "="*60)
     print("🌞 Starting Solar ML API...")
@@ -479,6 +570,8 @@ if __name__ == "__main__":
     print("   POST /predict/batch             - Batch efficiency predictions")
     print("   POST /predict/panel-defect      - Classify panel image (defect detection)")
     print("   POST /predict/panel-defect/batch- Batch image classification")
+    print("   POST /predict/tilt-optimize     - Find optimal tilt angle")
+    print("   GET  /predict/tilt-optimize/quick - Quick tilt optimization")
     print("   GET  /model/info                - Model information")
     print("\n📦 Models Loaded:")
     print(f"   • Efficiency Loss Model: {'✅ Ready' if model else '❌ Not loaded'}")

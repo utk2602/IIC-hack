@@ -46,8 +46,12 @@ router.post('/predict/efficiency', mlController.predictEfficiency);
 // POST /api/ml/predict/cleaning - Recommend cleaning schedule
 router.post('/predict/cleaning', mlController.predictCleaningSchedule);
 
-// POST /api/ml/optimize/tilt - Optimize tilt angle
+// ========== TILT OPTIMIZATION (ML-Powered) ==========
+// POST /api/ml/optimize/tilt - Optimize tilt angle using ML model
 router.post('/optimize/tilt', mlController.optimizeTilt);
+
+// GET /api/ml/optimize/tilt/quick - Quick tilt optimization
+router.get('/optimize/tilt/quick', mlController.quickTiltOptimize);
 
 // GET /api/ml/models/status - Check ML model service status
 router.get('/models/status', mlController.getModelStatus);

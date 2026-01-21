@@ -318,6 +318,131 @@ export async function classifyPanelImagesBatch(imageFiles: File[]): Promise<{
   }
 }
 
+// ==================== Tilt Optimization ====================
+
+export interface TiltOptimizationInput {
+  latitude: number;
+  longitude?: number;
+  ghi: number;
+  hour: number;
+  temperature?: number;
+  humidity?: number;
+  windSpeed?: number;
+  voltage?: number;
+  current?: number;
+  daysSinceInstallation?: number;
+  currentTilt?: number;
+}
+
+export interface TiltOptimizationResult {
+  optimizationId: string;
+  source: 'ml-model' | 'simulation';
+  location: {
+    latitude: number;
+    longitude: number;
+  };
+  currentSettings: {
+    tilt: number;
+    azimuth: number;
+  };
+  mlOptimization: {
+    optimalTilt: number;
+    estimatedEnergy: number;
+    solarElevation: number;
+    efficiencyLoss: number;
+    efficiencyRetained: number;
+    improvementPercent: number;
+    defaultTilt: number;
+    defaultEnergy: number;
+    tiltCurve?: Array<{
+      tilt: number;
+      effective_irradiance: number;
+      net_energy: number;
+    }>;
+  };
+  conditions: {
+    ghi: number;
+    latitude: number;
+    hour: number;
+    temperature: number;
+  };
+  recommendations: {
+    mlOptimalTilt: number;
+    annualOptimalTilt: number;
+    seasonalOptimalTilt: number;
+    optimalAzimuth: number;
+    adjustmentNeeded: boolean;
+  };
+  seasonalSchedule: Array<{
+    months: string;
+    recommendedTilt: string;
+  }>;
+  estimatedGain: {
+    withMLOptimization: string;
+    withTracking: string;
+  };
+}
+
+/**
+ * Optimize tilt angle using ML model
+ */
+export async function optimizeTiltAngle(input: TiltOptimizationInput): Promise<{
+  success: boolean;
+  data?: TiltOptimizationResult;
+  error?: string;
+}> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/ml/optimize/tilt`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(input),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Optimization failed');
+    }
+
+    return result;
+  } catch (error) {
+    console.error('Tilt optimization error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Optimization failed',
+    };
+  }
+}
+
+/**
+ * Quick tilt optimization with minimal parameters
+ */
+export async function quickTiltOptimize(params: {
+  ghi?: number;
+  latitude?: number;
+  hour?: number;
+  temperature?: number;
+}): Promise<{
+  success: boolean;
+  data?: {
+    optimalTilt: number;
+    estimatedEnergy: number;
+    improvementPercent: number;
+    solarElevation: number;
+  };
+  error?: string;
+}> {
+  const searchParams = new URLSearchParams();
+  if (params.ghi) searchParams.append('ghi', params.ghi.toString());
+  if (params.latitude) searchParams.append('latitude', params.latitude.toString());
+  if (params.hour) searchParams.append('hour', params.hour.toString());
+  if (params.temperature) searchParams.append('temperature', params.temperature.toString());
+
+  return fetchApi(`/ml/optimize/tilt/quick?${searchParams.toString()}`);
+}
+
 // Export all
 export const api = {
   checkHealth,
@@ -330,6 +455,8 @@ export const api = {
   getAlerts,
   classifyPanelImage,
   classifyPanelImagesBatch,
+  optimizeTiltAngle,
+  quickTiltOptimize,
 };
 
 export default api;

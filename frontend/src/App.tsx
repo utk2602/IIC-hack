@@ -5,6 +5,7 @@ import { Visualizer } from './pages/Visualizer';
 import { DataUpload } from './pages/DataUpload';
 import { Reports } from './pages/Reports';
 import { PanelDefectDetector } from './components/PanelDefectDetector/PanelDefectDetector';
+import { TiltOptimizer } from './components/TiltOptimizer/TiltOptimizer';
 
 function App() {
   const [currentView, setCurrentView] = useState('dashboard');
@@ -19,6 +20,8 @@ function App() {
         return <DataUpload />;
       case 'defect-detection':
         return <PanelDefectDetector />;
+      case 'tilt-optimizer':
+        return <TiltOptimizer />;
       case 'reports':
         return <Reports />;
       default:

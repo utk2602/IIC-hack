@@ -554,24 +554,55 @@ exports.predictCleaningSchedule = (req, res) => {
   }
 };
 
-// POST /api/ml/optimize/tilt
-exports.optimizeTilt = (req, res) => {
+// POST /api/ml/optimize/tilt - Uses real ML model for tilt optimization
+exports.optimizeTilt = async (req, res) => {
   try {
     const { 
       latitude, 
       longitude, 
+      ghi,
+      hour,
+      temperature,
+      humidity,
+      windSpeed,
+      voltage,
+      current,
+      daysSinceInstallation,
       currentTilt, 
       currentAzimuth,
-      optimizationPeriod = 'annual' 
+      tiltMin,
+      tiltMax
     } = req.body;
 
     const lat = latitude || 28.6139; // Default to Delhi
+    const currentHour = hour || new Date().getHours();
+    const irradiance = ghi || 800;
+
+    // Call ML service for optimization
+    const result = await mlService.optimizeTiltAngle({
+      ghi: irradiance,
+      latitude: lat,
+      hour: currentHour,
+      temperature: temperature || 25,
+      humidity: humidity || 50,
+      windSpeed: windSpeed || 2,
+      voltage: voltage || 38,
+      current: current || 8,
+      daysSinceInstallation: daysSinceInstallation || 365,
+      tiltMin: tiltMin || 0,
+      tiltMax: tiltMax || 60
+    });
+
+    if (!result.success) {
+      return res.status(500).json({ success: false, error: result.error || 'Optimization failed' });
+    }
+
+    const optimization = result.optimization;
     
-    // Simple tilt optimization (latitude-based rule of thumb)
+    // Seasonal calculations for additional context
     const optimalAnnualTilt = Math.abs(lat);
     const optimalSummerTilt = Math.max(0, Math.abs(lat) - 15);
     const optimalWinterTilt = Math.min(90, Math.abs(lat) + 15);
-
     const currentMonth = new Date().getMonth();
     const isSummer = currentMonth >= 3 && currentMonth <= 8;
     const seasonalOptimal = isSummer ? optimalSummerTilt : optimalWinterTilt;
@@ -580,26 +611,65 @@ exports.optimizeTilt = (req, res) => {
       success: true,
       data: {
         optimizationId: uuidv4(),
+        source: result.source,
         location: { latitude: lat, longitude: longitude || 77.2090 },
         currentSettings: {
           tilt: currentTilt || 30,
           azimuth: currentAzimuth || 180
         },
+        mlOptimization: {
+          optimalTilt: optimization.optimal_tilt,
+          estimatedEnergy: optimization.estimated_energy,
+          solarElevation: optimization.solar_elevation,
+          efficiencyLoss: optimization.efficiency_loss,
+          efficiencyRetained: optimization.efficiency_retained,
+          improvementPercent: optimization.improvement_percent,
+          defaultTilt: optimization.default_tilt,
+          defaultEnergy: optimization.default_energy,
+          tiltCurve: optimization.tilt_curve
+        },
+        conditions: optimization.conditions,
         recommendations: {
-          annualOptimalTilt: optimalAnnualTilt.toFixed(1),
-          seasonalOptimalTilt: seasonalOptimal.toFixed(1),
-          optimalAzimuth: lat >= 0 ? 180 : 0, // South for Northern Hemisphere
-          adjustmentNeeded: Math.abs((currentTilt || 30) - seasonalOptimal) > 5
+          mlOptimalTilt: optimization.optimal_tilt,
+          annualOptimalTilt: parseFloat(optimalAnnualTilt.toFixed(1)),
+          seasonalOptimalTilt: parseFloat(seasonalOptimal.toFixed(1)),
+          optimalAzimuth: lat >= 0 ? 180 : 0,
+          adjustmentNeeded: Math.abs((currentTilt || 30) - optimization.optimal_tilt) > 5
         },
         seasonalSchedule: [
           { months: 'Mar-Aug', recommendedTilt: optimalSummerTilt.toFixed(1) },
           { months: 'Sep-Feb', recommendedTilt: optimalWinterTilt.toFixed(1) }
         ],
         estimatedGain: {
-          withAdjustment: '8-12%',
+          withMLOptimization: `${Math.max(0, optimization.improvement_percent).toFixed(1)}%`,
           withTracking: '25-35%'
         },
-        modelVersion: modelStatus.tiltOptimizer.version
+        modelVersion: result.source === 'ml-model' ? '2.0.0-ml' : modelStatus.tiltOptimizer.version
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// GET /api/ml/optimize/tilt/quick - Quick tilt optimization
+exports.quickTiltOptimize = async (req, res) => {
+  try {
+    const result = await mlService.quickTiltOptimize({
+      ghi: parseFloat(req.query.ghi) || 800,
+      latitude: parseFloat(req.query.latitude) || 28.6,
+      hour: parseFloat(req.query.hour) || 12,
+      temperature: parseFloat(req.query.temperature) || 25
+    });
+
+    res.json({
+      success: true,
+      source: result.source,
+      data: {
+        optimalTilt: result.optimal_tilt,
+        estimatedEnergy: result.estimated_energy,
+        improvementPercent: result.improvement_percent,
+        solarElevation: result.solar_elevation
       }
     });
   } catch (error) {
