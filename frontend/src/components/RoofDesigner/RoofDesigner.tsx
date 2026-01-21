@@ -9,7 +9,7 @@ import { Controls } from './Controls';
 import { AdvancedStats } from './AdvancedStats';
 import { SolarPanel } from './SolarPanel';
 import { SolarPanelConfig } from './types/roof.types';
-import { predictEfficiency, EfficiencyPredictionResult } from '../../services/api';
+import { predictEfficiency, EfficiencyPredictionResult, optimizeTiltAngle, TiltOptimizationResult } from '../../services/api';
 
 const SceneController = ({ onStatsUpdate }: { onStatsUpdate: (angle: string) => void }) => {
   const { camera } = useThree();
@@ -45,6 +45,10 @@ export const RoofDesigner: React.FC = () => {
   const [mlPrediction, setMlPrediction] = useState<EfficiencyPredictionResult | null>(null);
   const [mlLoading, setMlLoading] = useState(false);
   const [mlError, setMlError] = useState<string | null>(null);
+
+  // Tilt Optimization State
+  const [tiltOptimization, setTiltOptimization] = useState<TiltOptimizationResult | null>(null);
+  const [tiltOptLoading, setTiltOptLoading] = useState(false);
 
   // Initial Configuration State
   const [config, setConfig] = useState<SolarPanelConfig>({
@@ -114,6 +118,38 @@ export const RoofDesigner: React.FC = () => {
     }
   }, [config]); // React to ALL config changes
 
+  // Fetch Tilt Optimization when config changes
+  const fetchTiltOptimization = useCallback(async () => {
+    setTiltOptLoading(true);
+    
+    try {
+      // Calculate irradiance based on light elevation (GHI = Global Horizontal Irradiance)
+      const ghi = 200 + (config.lightElevation / 90) * 800; // 200-1000 W/m²
+      // Estimate hour from light azimuth (180° = noon = 12:00)
+      const hour = Math.round(6 + (config.lightAzimuth / 360) * 12); // 6-18 range
+      // Temperature based on light intensity
+      const temperature = 15 + config.lightIntensity * 20;
+      
+      const result = await optimizeTiltAngle({
+        latitude: 51.5074, // London as default (can be made configurable)
+        ghi: ghi,
+        hour: hour,
+        temperature: temperature,
+        humidity: 50,
+        windSpeed: 3,
+        currentTilt: config.tilt,
+      });
+      
+      if (result.success && result.data) {
+        setTiltOptimization(result.data);
+      }
+    } catch (err) {
+      console.error('Tilt optimization error:', err);
+    } finally {
+      setTiltOptLoading(false);
+    }
+  }, [config]);
+
   // Debounce ML predictions - reduced to 100ms for faster response
   useEffect(() => {
     // Show loading immediately
@@ -121,10 +157,11 @@ export const RoofDesigner: React.FC = () => {
     
     const timeoutId = setTimeout(() => {
       fetchMLPrediction();
+      fetchTiltOptimization(); // Also fetch tilt optimization
     }, 100); // 100ms debounce - much more responsive
     
     return () => clearTimeout(timeoutId);
-  }, [fetchMLPrediction]);
+  }, [fetchMLPrediction, fetchTiltOptimization]);
 
   // Physics & Efficiency Calculation
   const stats = useMemo(() => {
@@ -258,8 +295,19 @@ export const RoofDesigner: React.FC = () => {
       mlError,
       mlPrediction,
       geometricEfficiency, // Keep for comparison
+      // Tilt optimization data
+      tiltOptimization,
+      tiltOptLoading,
     };
-  }, [config, viewAngle, mlPrediction, mlLoading, mlError]);
+  }, [config, viewAngle, mlPrediction, mlLoading, mlError, tiltOptimization, tiltOptLoading]);
+
+  // Handler to apply optimal tilt from ML recommendation
+  const handleApplyOptimalTilt = useCallback(() => {
+    if (tiltOptimization?.mlOptimization?.optimalTilt !== undefined) {
+      const optimalTilt = Math.round(tiltOptimization.mlOptimization.optimalTilt);
+      handleConfigChange({ tilt: optimalTilt, isRotationLocked: false });
+    }
+  }, [tiltOptimization]);
 
   return (
     <div className="relative w-full h-screen bg-gray-50 flex flex-col">
@@ -311,7 +359,7 @@ export const RoofDesigner: React.FC = () => {
           onResetCamera={handleResetCamera}
         />
         
-        <AdvancedStats stats={stats} />
+        <AdvancedStats stats={stats} onApplyOptimalTilt={handleApplyOptimalTilt} />
       </div>
     </div>
   );

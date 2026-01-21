@@ -1,12 +1,13 @@
 import React from 'react';
-import { ShieldCheck, AlertTriangle, Calendar, BrainCircuit, TrendingDown, Info, CheckCircle2, Loader2, Wifi, WifiOff } from 'lucide-react';
+import { ShieldCheck, AlertTriangle, Calendar, BrainCircuit, TrendingDown, Info, CheckCircle2, Loader2, Wifi, WifiOff, Target, Zap, ArrowUp, Sparkles } from 'lucide-react';
 import { ViewStats } from './types/roof.types';
 
 interface AdvancedStatsProps {
   stats: ViewStats;
+  onApplyOptimalTilt?: () => void;
 }
 
-export const AdvancedStats: React.FC<AdvancedStatsProps> = ({ stats }) => {
+export const AdvancedStats: React.FC<AdvancedStatsProps> = ({ stats, onApplyOptimalTilt }) => {
   const efficiencyLoss = (100 - stats.efficiency).toFixed(1);
   const nextCleaning = new Date();
   nextCleaning.setDate(nextCleaning.getDate() + 14);
@@ -14,6 +15,14 @@ export const AdvancedStats: React.FC<AdvancedStatsProps> = ({ stats }) => {
   // Determine status badge based on ML connection
   const isMLConnected = stats.mlSource === 'ml-model';
   const isLoading = stats.mlLoading;
+
+  // Tilt optimization data
+  const tiltOpt = stats.tiltOptimization;
+  const optimalTilt = tiltOpt?.mlOptimization?.optimalTilt;
+  const currentTilt = stats.panelTilt;
+  const tiltDifference = optimalTilt !== undefined ? Math.abs(optimalTilt - currentTilt) : 0;
+  const isOptimalTilt = tiltDifference < 2; // Within 2 degrees is considered optimal
+  const improvementPercent = tiltOpt?.mlOptimization?.improvementPercent || 0;
 
   return (
     <div className="absolute bottom-4 left-4 flex flex-col gap-4 w-96 max-h-[60vh] overflow-y-auto z-10 custom-scrollbar pr-1 pb-1">
@@ -118,6 +127,108 @@ export const AdvancedStats: React.FC<AdvancedStatsProps> = ({ stats }) => {
             </div>
           </div>
 
+        </div>
+      </div>
+
+      {/* ML Tilt Optimization Card */}
+      <div className="bg-white/90 backdrop-blur-md rounded-2xl shadow-xl border border-white/50 overflow-hidden">
+        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+          <h3 className="font-bold text-gray-800 flex items-center gap-2">
+            <Target className="w-5 h-5 text-emerald-600" />
+            Tilt Optimization
+          </h3>
+          {stats.tiltOptLoading ? (
+            <span className="text-xs bg-blue-100 text-blue-700 font-bold px-2 py-1 rounded-full flex items-center gap-1">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Calculating
+            </span>
+          ) : optimalTilt !== undefined ? (
+            <span className={`text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1 ${
+              isOptimalTilt ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+            }`}>
+              {isOptimalTilt ? <CheckCircle2 className="w-3 h-3" /> : <ArrowUp className="w-3 h-3" />}
+              {isOptimalTilt ? 'Optimal' : 'Adjust Needed'}
+            </span>
+          ) : (
+            <span className="text-xs bg-gray-100 text-gray-600 font-bold px-2 py-1 rounded-full">
+              N/A
+            </span>
+          )}
+        </div>
+
+        <div className="p-4 space-y-4">
+          {/* Current vs Optimal Tilt */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-slate-50 rounded-xl p-3 text-center border border-slate-100">
+              <p className="text-xs text-slate-500 uppercase tracking-wide font-medium mb-1">Current Tilt</p>
+              <p className="text-2xl font-bold text-slate-700">{currentTilt}°</p>
+            </div>
+            <div className={`rounded-xl p-3 text-center border ${
+              optimalTilt !== undefined 
+                ? isOptimalTilt 
+                  ? 'bg-emerald-50 border-emerald-200' 
+                  : 'bg-amber-50 border-amber-200'
+                : 'bg-slate-50 border-slate-100'
+            }`}>
+              <p className="text-xs text-slate-500 uppercase tracking-wide font-medium mb-1">
+                <Sparkles className="w-3 h-3 inline mr-1" />
+                ML Optimal
+              </p>
+              <p className={`text-2xl font-bold ${
+                optimalTilt !== undefined 
+                  ? isOptimalTilt ? 'text-emerald-600' : 'text-amber-600'
+                  : 'text-slate-400'
+              }`}>
+                {optimalTilt !== undefined ? `${Math.round(optimalTilt)}°` : '--'}
+              </p>
+            </div>
+          </div>
+
+          {/* Improvement Potential */}
+          {optimalTilt !== undefined && !isOptimalTilt && improvementPercent > 0 && (
+            <div className="bg-gradient-to-r from-emerald-50 to-green-50 rounded-xl p-3 border border-emerald-100">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-emerald-600" />
+                  <span className="text-sm font-medium text-emerald-800">Potential Improvement</span>
+                </div>
+                <span className="text-lg font-bold text-emerald-600">+{improvementPercent.toFixed(1)}%</span>
+              </div>
+              <p className="text-xs text-emerald-600/80 mt-1">
+                Adjusting tilt by {tiltDifference.toFixed(0)}° can boost energy output
+              </p>
+            </div>
+          )}
+
+          {/* Apply Optimal Button */}
+          {optimalTilt !== undefined && !isOptimalTilt && onApplyOptimalTilt && (
+            <button
+              onClick={onApplyOptimalTilt}
+              className="w-full bg-gradient-to-r from-emerald-500 to-green-500 text-white font-semibold py-2.5 px-4 rounded-xl shadow-md hover:shadow-lg hover:from-emerald-600 hover:to-green-600 transition-all flex items-center justify-center gap-2"
+            >
+              <Target className="w-4 h-4" />
+              Apply Optimal Tilt ({Math.round(optimalTilt)}°)
+            </button>
+          )}
+
+          {/* Efficiency Retained */}
+          {tiltOpt?.mlOptimization?.efficiencyRetained !== undefined && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-slate-600">Efficiency at Current Tilt</span>
+              <span className="font-bold text-slate-800">{tiltOpt.mlOptimization.efficiencyRetained.toFixed(1)}%</span>
+            </div>
+          )}
+
+          {/* Solar Elevation Info */}
+          {tiltOpt?.mlOptimization?.solarElevation !== undefined && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-slate-600 flex items-center gap-1">
+                <Info className="w-3 h-3" />
+                Solar Elevation
+              </span>
+              <span className="font-medium text-slate-700">{tiltOpt.mlOptimization.solarElevation.toFixed(1)}°</span>
+            </div>
+          )}
         </div>
       </div>
 

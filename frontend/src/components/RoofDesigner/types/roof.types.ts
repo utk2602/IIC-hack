@@ -62,6 +62,26 @@ export interface ViewStats {
     recommendations?: string[];
   } | null;
   geometricEfficiency?: number;
+  // Tilt optimization data
+  tiltOptimization?: {
+    mlOptimization?: {
+      optimalTilt: number;
+      estimatedEnergy: number;
+      solarElevation: number;
+      efficiencyLoss: number;
+      efficiencyRetained: number;
+      improvementPercent: number;
+    };
+    recommendations?: {
+      mlOptimalTilt: number;
+      adjustmentNeeded: boolean;
+    };
+    estimatedGain?: {
+      withMLOptimization: string;
+      withTracking: string;
+    };
+  } | null;
+  tiltOptLoading?: boolean;
 }
 
 export interface SolarPanel {
